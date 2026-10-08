@@ -8,6 +8,7 @@ import { CvsService } from './cvs/cvs.service.js';
 import { GenerationService } from './generation/generation.service.js';
 import { HealthController } from './health.controller.js';
 import { IngestionService } from './ingestion/ingestion.service.js';
+import { PdfService } from './pdf/pdf.service.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { QuestionsService } from './questions/questions.service.js';
 import { QueueService } from './queue/queue.service.js';
@@ -28,6 +29,7 @@ import { QueueService } from './queue/queue.service.js';
     QuestionsService,
     IngestionService,
     GenerationService,
+    PdfService,
   ],
 })
 export class AppModule {}

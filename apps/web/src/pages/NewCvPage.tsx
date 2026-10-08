@@ -1,36 +1,31 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LIMITS, TargetRoleSchema } from '@cv/shared';
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { api } from '../api';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { useCreateCv } from '../queries';
 
 type Source = 'pdf' | 'text';
 
 export function NewCvPage() {
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const [source, setSource] = useState<Source>('pdf');
   const [targetRole, setTargetRole] = useState('');
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const create = useMutation({
-    mutationFn: () =>
-      source === 'pdf' ? api.createFromPdf(file!, targetRole.trim()) : api.createFromText({ targetRole: targetRole.trim(), text: text.trim() }),
-    onSuccess: (cv) => {
-      qc.setQueryData(['cv', cv.id], cv);
-      void qc.invalidateQueries({ queryKey: ['cvs'] });
-      navigate(`/cvs/${cv.id}`);
-    },
-  });
+  const create = useCreateCv();
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const error = validate();
     setFormError(error);
-    if (!error) create.mutate();
+    if (error) return;
+    const input =
+      source === 'pdf'
+        ? ({ source, file: file!, targetRole: targetRole.trim() } as const)
+        : ({ source, targetRole: targetRole.trim(), text: text.trim() } as const);
+    create.mutate(input, { onSuccess: (cv) => navigate(`/cvs/${cv.id}`) });
   };
 
   const validate = (): string | null => {
@@ -120,7 +115,7 @@ export function NewCvPage() {
           Cancel
         </button>
         <button className="btn-primary" disabled={create.isPending}>
-          {create.isPending ? (source === 'pdf' ? 'Uploading…' : 'Starting…') : 'Generate CV'}
+          Generate CV
         </button>
       </div>
     </form>

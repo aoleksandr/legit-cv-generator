@@ -66,7 +66,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
         </div>
         {formError ? <ErrorBanner>{formError}</ErrorBanner> : <ErrorBanner error={mutation.error} />}
         <button className="btn-primary w-full" disabled={mutation.isPending}>
-          {mutation.isPending ? 'Please wait…' : isLogin ? 'Sign in' : 'Sign up'}
+          {isLogin ? 'Sign in' : 'Sign up'}
         </button>
         <p className="text-center text-sm text-slate-500">
           {isLogin ? "Don't have an account? " : 'Already have an account? '}

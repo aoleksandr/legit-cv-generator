@@ -11,8 +11,7 @@ export function GenerationProgress({ cv }: { cv: CvDetail }) {
   const current = cv.progressStep ? STEPS.findIndex((s) => s.key === cv.progressStep) : -1;
   return (
     <div className="card mx-auto max-w-xl p-6" aria-live="polite">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="h-6 w-6 shrink-0 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+      <div className="mb-4">
         <div>
           <h2 className="font-semibold">{cv.status === 'queued' ? 'Waiting to start…' : 'Generating your CV…'}</h2>
           <p className="text-sm text-slate-500">

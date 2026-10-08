@@ -1,17 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
-import { api } from '../api';
-import { FullPageSpinner } from '../auth';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { StatusBadge } from '../components/StatusBadge';
+import { useCvList } from '../queries';
 
 export function CvListPage() {
-  const { data: cvs, isPending, error } = useQuery({
-    queryKey: ['cvs'],
-    queryFn: api.listCvs,
-    // Keep statuses fresh while anything is still generating.
-    refetchInterval: (q) => (q.state.data?.some((c) => c.status === 'queued' || c.status === 'processing') ? 3000 : false),
-  });
+  const { data: cvs, isPending, error } = useCvList();
 
   return (
     <div className="space-y-6">
@@ -22,9 +15,7 @@ export function CvListPage() {
         </Link>
       </div>
       {error && <ErrorBanner error={error} />}
-      {isPending ? (
-        <FullPageSpinner />
-      ) : cvs && cvs.length === 0 ? (
+      {isPending ? null : cvs && cvs.length === 0 ? (
         <div className="card p-8 text-center">
           <p className="mb-4 text-slate-600">You don't have any CVs yet.</p>
           <Link to="/cvs/new" className="btn-primary">

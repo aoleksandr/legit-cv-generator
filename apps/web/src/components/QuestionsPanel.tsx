@@ -1,8 +1,7 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { LIMITS, parseFieldPath, type CvDetail, type CvDocument, type Question } from '@cv/shared';
-import { useState } from 'react';
-import { api } from '../api';
-import { ErrorBanner } from './ErrorBanner';
+import { useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { useAnswerQuestion, useDismissQuestion } from '../queries';
 
 /** Human label for the part of the CV a question is about, e.g. "Experience · Acme Corp". */
 export function fieldLabel(fieldPath: string, content: CvDocument | null): string {
@@ -25,7 +24,7 @@ function scrollToField(fieldPath: string) {
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-export function QuestionsPanel({ cv, disabledReason }: { cv: CvDetail; disabledReason?: string }) {
+export function QuestionsPanel({ cv }: { cv: CvDetail }) {
   const open = cv.questions.filter((q) => q.status === 'open');
   const answered = cv.questions.filter((q) => q.status === 'answered');
 
@@ -37,10 +36,9 @@ export function QuestionsPanel({ cv, disabledReason }: { cv: CvDetail; disabledR
           ? 'Some details were missing or unclear. Your answers update the relevant part of the CV.'
           : 'No open questions. You can still edit anything by hand.'}
       </p>
-      {disabledReason && open.length > 0 && <p className="mb-3 text-xs text-amber-700">{disabledReason}</p>}
       <ul className="space-y-3">
         {open.map((q) => (
-          <QuestionItem key={q.id} cv={cv} question={q} disabled={!!disabledReason} />
+          <QuestionItem key={q.id} cv={cv} question={q} />
         ))}
       </ul>
       {answered.length > 0 && (
@@ -60,19 +58,20 @@ export function QuestionsPanel({ cv, disabledReason }: { cv: CvDetail; disabledR
   );
 }
 
-function QuestionItem({ cv, question, disabled }: { cv: CvDetail; question: Question; disabled: boolean }) {
-  const qc = useQueryClient();
+function QuestionItem({ cv, question }: { cv: CvDetail; question: Question }) {
   const [answer, setAnswer] = useState(question.answer ?? '');
-  const refresh = (q: Question) => {
-    qc.setQueryData<CvDetail>(['cv', cv.id], (old) =>
-      old ? { ...old, questions: old.questions.map((x) => (x.id === q.id ? q : x)) } : old,
-    );
-    void qc.invalidateQueries({ queryKey: ['cv', cv.id] });
-  };
-  const submit = useMutation({ mutationFn: () => api.answer(cv.id, question.id, answer.trim()), onSuccess: refresh });
-  const dismiss = useMutation({ mutationFn: () => api.dismiss(cv.id, question.id), onSuccess: refresh });
+  const submit = useAnswerQuestion(cv.id);
+  const dismiss = useDismissQuestion(cv.id);
 
-  const busy = question.applying || submit.isPending;
+  // The answer is applied by a background job; tell the user if that job gave up.
+  const wasApplying = useRef(question.applying);
+  useEffect(() => {
+    if (wasApplying.current && !question.applying && question.error) {
+      toast.error('Your answer could not be applied', { description: question.error });
+    }
+    wasApplying.current = question.applying;
+  }, [question.applying, question.error]);
+
   return (
     <li className="rounded-lg border border-slate-200 p-3">
       <button type="button" className="mb-1 text-xs font-medium text-indigo-600 hover:underline" onClick={() => scrollToField(question.fieldPath)}>
@@ -80,15 +79,15 @@ function QuestionItem({ cv, question, disabled }: { cv: CvDetail; question: Ques
       </button>
       <p className="mb-2 text-sm">{question.question}</p>
       {question.applying ? (
-        <div className="flex items-center gap-2 text-sm text-slate-600" aria-live="polite">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
-          Updating your CV…
+        <div className="space-y-1 text-sm" aria-live="polite">
+          <p className="rounded-lg bg-slate-50 p-2 text-slate-900">{question.answer}</p>
+          <p className="text-xs text-slate-500">Adding your answer to the CV. It will appear in the editor shortly.</p>
         </div>
       ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (answer.trim()) submit.mutate();
+            if (answer.trim()) submit.mutate({ questionId: question.id, answer: answer.trim() });
           }}
           className="space-y-2"
         >
@@ -98,15 +97,12 @@ function QuestionItem({ cv, question, disabled }: { cv: CvDetail; question: Ques
             maxLength={LIMITS.answerMaxChars}
             placeholder="Your answer"
             onChange={(e) => setAnswer(e.target.value)}
-            disabled={disabled}
           />
-          {question.error && <ErrorBanner>{question.error}</ErrorBanner>}
-          <ErrorBanner error={submit.error ?? dismiss.error} />
           <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost" onClick={() => dismiss.mutate()} disabled={busy || dismiss.isPending || disabled}>
+            <button type="button" className="btn-ghost" onClick={() => dismiss.mutate(question.id)}>
               Skip
             </button>
-            <button className="btn-primary px-3 py-1.5" disabled={busy || !answer.trim() || disabled}>
+            <button className="btn-primary px-3 py-1.5" disabled={!answer.trim()}>
               Answer
             </button>
           </div>

@@ -1,17 +1,12 @@
 import { Link, Outlet, useNavigate } from 'react-router';
-import { api } from '../api';
-import { useMe, useSetUser } from '../auth';
+import { useLogout, useMe } from '../auth';
 
 export function Layout() {
   const { data: user } = useMe();
-  const setUser = useSetUser();
+  const logoutMutation = useLogout();
   const navigate = useNavigate();
 
-  const logout = async () => {
-    await api.logout().catch(() => undefined);
-    setUser(null);
-    navigate('/login');
-  };
+  const logout = () => logoutMutation.mutate(undefined, { onSettled: () => navigate('/login') });
 
   return (
     <div className="min-h-screen">

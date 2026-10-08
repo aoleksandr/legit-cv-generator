@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Body,
   Controller,
   Delete,
@@ -10,6 +11,7 @@ import {
   Patch,
   Post,
   Put,
+  Res,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -29,11 +31,13 @@ import {
   type Question,
   type UpdateCvContent,
 } from '@cv/shared';
+import type { Response } from 'express';
 import { UserId } from '../auth/auth.decorators.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { IngestionService } from '../ingestion/ingestion.service.js';
+import { contentDisposition, PdfService } from '../pdf/pdf.service.js';
 import { QuestionsService } from '../questions/questions.service.js';
-import { toDetail, toQuestion, toSummary } from './cv.mapper.js';
+import { readContent, toDetail, toQuestion, toSummary } from './cv.mapper.js';
 import { CvsService } from './cvs.service.js';
 
 const uuid = new ParseUUIDPipe({ version: '4' });
@@ -47,6 +51,7 @@ export class CvsController {
     private readonly cvs: CvsService,
     private readonly ingestion: IngestionService,
     private readonly questions: QuestionsService,
+    private readonly pdf: PdfService,
   ) {}
 
   @Get()
@@ -89,6 +94,28 @@ export class CvsController {
   async get(@UserId() userId: string, @Param('id', uuid) id: string): Promise<CvDetail> {
     const { cv, questions } = await this.cvs.getDetail(userId, id);
     return toDetail(cv, questions);
+  }
+
+  /** A4 PDF with selectable text, rendered from the saved content. */
+  @Get(':id/pdf')
+  async downloadPdf(
+    @UserId() userId: string,
+    @Param('id', uuid) id: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const cv = await this.cvs.getOwned(userId, id);
+    const content = cv.status === 'ready' ? readContent(cv) : null;
+    if (!content) throw new ConflictException('The CV is not ready yet');
+    const buffer = await this.pdf.render(content, cv.title);
+    res
+      .status(200)
+      .set({
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(buffer.length),
+        'Content-Disposition': contentDisposition(content.contact.fullName ? `${content.contact.fullName} - ${cv.title}` : cv.title),
+        'Cache-Control': 'private, no-store',
+      })
+      .end(buffer);
   }
 
   @Patch(':id')

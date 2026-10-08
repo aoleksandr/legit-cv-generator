@@ -1,109 +1,89 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { CvDetail, CvDocument } from '@cv/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, ApiError } from '../api';
-
-export type SaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error' | 'conflict';
+import { keys, useSaveContent } from '../queries';
 
 const AUTOSAVE_DELAY_MS = 800;
 
 /**
- * Local editable copy of the CV with debounced autosave and optimistic locking.
+ * Local editable copy of the CV with debounced, optimistic autosave.
  *
- * - While there are no unsaved edits, the draft follows the server (e.g. when
- *   an answered question updates the CV).
- * - Saves send the version the edits were based on; a 409 means the CV changed
- *   elsewhere (another device, or an answer applied meanwhile) and the user
- *   chooses to reload instead of silently overwriting.
+ * Keystrokes update the local draft instantly; after a pause the whole
+ * document is saved (optimistically written to the query cache). Saves are
+ * serialised so each one carries the version the previous one produced. If a
+ * save fails, the mutation rolls the cache back and the draft follows it.
+ * Changes from elsewhere (an answered question, another device) replace the
+ * draft only when the user has nothing unsaved.
  */
 export function useCvDraft(cv: CvDetail) {
   const qc = useQueryClient();
+  const save = useSaveContent(cv.id);
   const [draft, setDraft] = useState<CvDocument>(() => cv.content!);
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const baseVersion = useRef(cv.version);
-  const dirty = useRef(false);
-  const editSeq = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [hasPendingEdits, setHasPendingEdits] = useState(false);
+
   const draftRef = useRef(draft);
-  const conflict = useRef(false);
+  const pending = useRef(false);
+  const inFlight = useRef(false);
+  const ownVersion = useRef(cv.version);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Follow server changes when the user has nothing unsaved.
+  const replaceDraft = useCallback((content: CvDocument) => {
+    draftRef.current = content;
+    setDraft(content);
+  }, []);
+
+  // Follow changes made elsewhere, but never clobber unsaved local edits.
   useEffect(() => {
-    if (!dirty.current && cv.content && cv.version !== baseVersion.current) {
-      baseVersion.current = cv.version;
-      draftRef.current = cv.content;
-      setDraft(cv.content);
+    if (!pending.current && !inFlight.current && cv.content && cv.version !== ownVersion.current) {
+      ownVersion.current = cv.version;
+      replaceDraft(cv.content);
     }
-  }, [cv.version, cv.content]);
+  }, [cv.version, cv.content, replaceDraft]);
 
-  const save = useMutation({
-    mutationFn: ({ content }: { content: CvDocument; seq: number }) =>
-      api.updateContent(cv.id, baseVersion.current, forSaving(content)),
-    onMutate: () => setSaveState('saving'),
-    onSuccess: (updated, { seq }) => {
-      baseVersion.current = updated.version;
-      qc.setQueryData(['cv', cv.id], updated);
-      if (seq === editSeq.current) {
-        dirty.current = false;
-        setSaveState('saved');
-      }
-      setSaveError(null);
-    },
-    onError: (err) => {
-      if (err instanceof ApiError && err.status === 409) {
-        conflict.current = true;
-        setSaveState('conflict');
-      } else {
-        setSaveState('error');
-        setSaveError(err instanceof Error ? err.message : 'Could not save');
-      }
-    },
-  });
-
-  const flush = useCallback(
-    (content: CvDocument) => {
-      clearTimeout(timer.current);
-      save.mutate({ content, seq: editSeq.current });
-    },
-    [save],
-  );
+  const commit = useCallback(() => {
+    if (inFlight.current) return; // the running save picks up the latest draft when it settles
+    const version = qc.getQueryData<CvDetail>(keys.cv(cv.id))?.version ?? ownVersion.current;
+    pending.current = false;
+    inFlight.current = true;
+    save.mutate(
+      { version, content: forSaving(draftRef.current) },
+      {
+        onSuccess: (updated) => {
+          ownVersion.current = updated.version;
+        },
+        onError: () => {
+          // The mutation restored the last accepted content; drop local edits made on top of the failed one.
+          pending.current = false;
+          clearTimeout(timer.current);
+          const restored = qc.getQueryData<CvDetail>(keys.cv(cv.id))?.content;
+          if (restored) replaceDraft(restored);
+        },
+        onSettled: () => {
+          inFlight.current = false;
+          if (pending.current) commit();
+          else setHasPendingEdits(false);
+        },
+      },
+    );
+  }, [qc, cv.id, save, replaceDraft]);
 
   const update = useCallback(
     (fn: (d: CvDocument) => void) => {
       const next = structuredClone(draftRef.current);
       fn(next);
-      draftRef.current = next;
-      setDraft(next);
-      dirty.current = true;
-      editSeq.current++;
+      replaceDraft(next);
+      pending.current = true;
+      setHasPendingEdits(true);
       clearTimeout(timer.current);
-      // After a conflict, stop autosaving until the user decides (reload or keep editing locally).
-      if (conflict.current) return;
-      setSaveState('pending');
-      timer.current = setTimeout(() => flush(draftRef.current), AUTOSAVE_DELAY_MS);
+      timer.current = setTimeout(commit, AUTOSAVE_DELAY_MS);
     },
-    [flush],
+    [commit, replaceDraft],
   );
-
-  /** Discard local edits and take the server's latest version. */
-  const reloadLatest = useCallback(async () => {
-    clearTimeout(timer.current);
-    const latest = await qc.fetchQuery({ queryKey: ['cv', cv.id], queryFn: () => api.getCv(cv.id) });
-    dirty.current = false;
-    conflict.current = false;
-    baseVersion.current = latest.version;
-    if (latest.content) {
-      draftRef.current = latest.content;
-      setDraft(latest.content);
-    }
-    setSaveState('idle');
-  }, [qc, cv.id]);
 
   // Warn before leaving with unsaved edits.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirty.current) e.preventDefault();
+      if (pending.current || inFlight.current) e.preventDefault();
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
@@ -112,7 +92,7 @@ export function useCvDraft(cv: CvDetail) {
     };
   }, []);
 
-  return { draft, update, saveState, saveError, retrySave: () => flush(draftRef.current), reloadLatest, hasUnsaved: () => dirty.current };
+  return { draft, update, saving: hasPendingEdits };
 }
 
 /**

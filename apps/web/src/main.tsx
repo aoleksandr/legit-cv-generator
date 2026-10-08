@@ -2,6 +2,7 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@ta
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, Navigate, RouterProvider } from 'react-router';
+import { Toaster } from 'sonner';
 import { ApiError } from './api';
 import { meKey, RequireAuth } from './auth';
 import { Layout } from './components/Layout';
@@ -50,6 +51,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
+      <Toaster position="top-center" richColors closeButton />
     </QueryClientProvider>
   </StrictMode>,
 );

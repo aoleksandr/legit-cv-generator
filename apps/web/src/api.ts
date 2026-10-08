@@ -32,7 +32,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => null);
   if (!res.ok) {
-    const message = typeof body?.message === 'string' ? body.message : `Request failed (${res.status})`;
+    // Gateway errors (or a non-JSON error page) mean the API itself is down or unreachable.
+    const unreachable = [502, 503, 504].includes(res.status) || typeof body?.message !== 'string';
+    const message = unreachable
+      ? res.status >= 500
+        ? 'Cannot reach the server. Please try again in a moment.'
+        : `Request failed (${res.status})`
+      : body.message;
     throw new ApiError(res.status, message, body?.details);
   }
   return body as T;

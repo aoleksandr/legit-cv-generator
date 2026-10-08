@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { User } from '@cv/shared';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { api, ApiError } from './api';
@@ -33,7 +33,7 @@ export function useSetUser() {
 export function RequireAuth() {
   const { data: user, isPending, isError, refetch } = useMe();
   const location = useLocation();
-  if (isPending) return <FullPageSpinner />;
+  if (isPending) return null;
   if (isError) {
     return (
       <div className="p-8 text-center">
@@ -48,10 +48,11 @@ export function RequireAuth() {
   return <Outlet />;
 }
 
-export function FullPageSpinner() {
-  return (
-    <div className="flex min-h-[50vh] items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-    </div>
-  );
+export function useLogout() {
+  const setUser = useSetUser();
+  return useMutation({
+    mutationFn: api.logout,
+    // Sign out locally even if the request fails: the cookie expires on its own.
+    onSettled: () => setUser(null),
+  });
 }

@@ -109,6 +109,13 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
 - It runs Zod validation and an optimistic-lock check. A stale version returns **409**.
 - The frontend editor autosaves with a debounce.
 
+## Frontend conventions
+
+- **All API interaction goes through TanStack Query.** Query and mutation hooks live in `apps/web/src/queries.ts` (auth hooks in `auth.tsx`). Components never call `api.*` directly.
+- **Mutations are optimistic.** Update the cache in `onMutate` (snapshot first), roll back in `onError`, and show a `sonner` toast that explains what was undone.
+- **No preloaders or spinners anywhere.** While data is first loading, render nothing; for background work, show static text.
+- The editor keeps a local draft and saves it debounced (`useCvDraft`). Saves run one at a time, each carrying the version from the previous save. The header shows "Saving your edits…" or "All changes saved". On a 409, the edit is reverted to the latest server version and a toast explains why.
+
 ## Testing priorities
 
 1. Grounding and verification logic (unit tests): quote matching, stripping unsupported numbers and companies, rejecting bullets without fact ids.
