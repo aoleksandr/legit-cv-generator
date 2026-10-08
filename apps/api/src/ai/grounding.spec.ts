@@ -154,7 +154,6 @@ describe('verifyCv (output grounding)', () => {
     expect(cv.summary).toBe('Led a team of 4 engineers.');
   });
 
-  // Years are checked against the whole ledger, not per entry (a known limitation, see README).
   it('clears dates with years that are not in the facts', () => {
     const { cv, issues } = check((d) => {
       d.experience[1].startDate = '2016';
@@ -163,6 +162,93 @@ describe('verifyCv (output grounding)', () => {
     expect(cv.experience[1].startDate).toBe('');
     expect(cv.education[0].endDate).toBe('');
     expect(issues.map((i) => i.fieldPath)).toContain('experience:exp_2');
+  });
+
+  describe('per-entry scoping', () => {
+    it('clears a real year moved onto a different role', () => {
+      const { cv, removed } = check((d) => {
+        d.experience[0].startDate = 'Jan 2018'; // 2018 belongs to Globex (exp_2) and the degree, not Acme
+        d.experience[1].endDate = '2020'; // 2020 belongs to Acme (exp_1)
+        d.education[0].startDate = '2019'; // 2019 belongs to Globex
+      });
+      expect(cv.experience[0].startDate).toBe('');
+      expect(cv.experience[1].endDate).toBe('');
+      expect(cv.education[0].startDate).toBe('');
+      expect(removed).toHaveLength(3);
+    });
+
+    it('drops a bullet that cites another role’s facts', () => {
+      const { cv, removed } = check((d) => {
+        d.experience[0].bullets.push({ text: 'Maintained internal tools', factIds: ['f9'] });
+      });
+      expect(cv.experience[0].bullets.map((b) => b.text)).not.toContain('Maintained internal tools');
+      expect(removed).toEqual([expect.stringMatching(/^experience:exp_1 bullet without valid facts of this entry/)]);
+    });
+
+    it('keeps only the citations that belong to the entry', () => {
+      const { cv } = check((d) => {
+        d.experience[0].bullets[1].factIds = ['f7', 'f9'];
+      });
+      expect(cv.experience[0].bullets[1].factIds).toEqual(['f7']);
+    });
+
+    it('rejects numbers in education details that come from another entry', () => {
+      const { cv } = check((d) => {
+        d.education[0].details = 'Graduated 2019';
+      });
+      expect(cv.education[0].details).toBe('');
+    });
+
+    it('clears a real company or title moved onto a different role, and asks about it', () => {
+      const { cv, issues } = check((d) => {
+        d.experience[0].company = 'Globex'; // Globex is exp_2's employer
+        d.experience[1].title = 'Backend Engineer'; // exp_1's title
+      });
+      expect(cv.experience[0].company).toBe('');
+      expect(cv.experience[1].title).toBe('');
+      expect(issues.map((i) => i.fieldPath)).toEqual(expect.arrayContaining(['experience:exp_1', 'experience:exp_2']));
+    });
+
+    it('clears an education name taken from another entry', () => {
+      const { cv } = check((d) => {
+        d.education[0].institution = 'Acme Corp';
+        d.education[0].field = 'Payments';
+      });
+      expect(cv.education[0]).toMatchObject({ institution: '', field: '' });
+    });
+
+    it('allows a location from the contact facts on any role', () => {
+      const { cv, removed } = check((d) => {
+        d.experience[0].location = 'London';
+      });
+      expect(removed).toEqual([]);
+      expect(cv.experience[0].location).toBe('London');
+    });
+
+    it('lets facts without an entry support any entry', () => {
+      // e.g. a section-level answer ("experience"), stored with entry: null.
+      const answer: Fact = {
+        id: 'answer_1',
+        category: 'experience',
+        entry: null,
+        text: 'I joined Globex in 2017',
+        sourceQuote: 'I joined Globex in 2017',
+        origin: 'user_answer',
+      };
+      const d = composition();
+      d.experience[1].startDate = '2017';
+      d.experience[1].bullets.push({ text: 'Joined Globex in 2017', factIds: ['answer_1'] });
+      const { cv, removed } = verifyCv(toCvDocument(d), [...FACTS, answer]);
+      expect(removed).toEqual([]);
+      expect(cv.experience[1].startDate).toBe('2017');
+    });
+
+    it('clears dates of an entry that has no facts of its own', () => {
+      const d = composition();
+      d.experience.push({ ...d.experience[1], id: 'exp_9', bullets: [] });
+      const { cv } = verifyCv(toCvDocument(d), FACTS);
+      expect(cv.experience[2]).toMatchObject({ startDate: '', endDate: '' });
+    });
   });
 
   it('removes skills that are not in the facts', () => {

@@ -29,7 +29,7 @@ ${DATA_RULE}
 Rules:
 - Use ONLY the provided facts. You may rephrase and restructure, but must not add employers, titles, dates, numbers, metrics, technologies, responsibilities or outcomes that the facts do not state. Vague is better than invented.
 - Copy names, email, phone, links, job titles, company names, institutions, degrees and years exactly as they appear in the facts.
-- Experience: one entry per "exp_*" entry key, with "id" set to that key. Write 1-6 concise bullet points per role (as many as the facts support - never pad to reach a count), starting with an action verb, no first person. Every bullet MUST list in "factIds" the ids of all facts it is based on; a bullet without supporting facts will be deleted. Order roles by relevance to the target role (most relevant first; ties by recency).
+- Experience: one entry per "exp_*" entry key, with "id" set to that key. Write 1-6 concise bullet points per role (as many as the facts support - never pad to reach a count), starting with an action verb, no first person. Every bullet MUST list in "factIds" the ids of all facts it is based on, and may only use facts of its own entry (or facts with no entry); a bullet without such facts will be deleted. Order roles by relevance to the target role (most relevant first; ties by recency).
 - Education: one entry per "edu_*" entry key, with "id" set to that key.
 - Write only what the facts say. No filler that adds meaning, e.g. "focused on software development", "ensuring reliability", "track record of", "data-intensive", "passionate about".
 - Summary: 2-3 sentences targeting the role, built only from the facts. No qualitative claims the facts do not support, and no total years of experience unless a fact states it.

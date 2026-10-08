@@ -101,12 +101,14 @@ class Corpus {
    * Every word of the value appears in the facts (allows reordering, not invention).
    * A word of 4+ characters may also be the start of a fact word, so "Intern"
    * matches "Internship" and "Engineer" matches "Engineering".
+   * With `within`, only those facts count (see forEntry).
    */
-  hasWords(value: string): boolean {
+  hasWords(value: string, within?: Fact[]): boolean {
+    const text = within ? ` ${normalize(within.map((f) => `${f.text}\n${f.sourceQuote}`).join('\n'))} ` : this.text;
     return normalize(value)
       .split(' ')
       .filter(Boolean)
-      .every((w) => this.text.includes(` ${w} `) || (w.length >= 4 && this.text.includes(` ${w}`)));
+      .every((w) => text.includes(` ${w} `) || (w.length >= 4 && text.includes(` ${w}`)));
   }
 
   hasDigits(value: string): boolean {
@@ -125,12 +127,25 @@ class Corpus {
     return this.byId.get(id);
   }
 
+  /**
+   * Facts that may support a CV entry: those about the entry itself, plus those
+   * not attributed to any entry (contact, skills, section-level answers). A fact
+   * about another job never counts, so details can't migrate between roles.
+   */
+  forEntry(entryId: string): Fact[] {
+    return [...this.byId.values()].filter((f) => belongsTo(f, entryId));
+  }
+
   private digitsInFacts(digits: string): boolean {
     for (const f of this.byId.values()) {
       if (f.sourceQuote.replace(/\D/g, '').includes(digits)) return true;
     }
     return false;
   }
+}
+
+function belongsTo(fact: Fact, entryId: string): boolean {
+  return fact.entry === null || fact.entry === entryId;
 }
 
 export interface CvCheckResult {
@@ -193,25 +208,26 @@ export function verifyCv(input: CvDocument, facts: Fact[]): CvCheckResult {
 function checkExperience(item: ExperienceItem, corpus: Corpus, issues: Issue[], removed: string[]): ExperienceItem {
   const path = `experience:${item.id}`;
   const label = item.company || item.title || 'this role';
+  const own = corpus.forEntry(item.id);
 
   for (const key of ['title', 'company', 'location'] as const) {
-    if (item[key] && !corpus.hasWords(item[key])) {
+    if (item[key] && !corpus.hasWords(item[key], own)) {
       removed.push(`${path}.${key}: ${item[key]}`);
       item[key] = '';
     }
   }
   for (const key of ['startDate', 'endDate'] as const) {
-    // Dates may be reformatted ("Mar" -> "March", "now" -> "Present"), but years must be real.
-    if (item[key] && corpus.unsupportedNumbers(item[key]).length > 0) {
+    // Dates may be reformatted ("Mar" -> "March", "now" -> "Present"), but years must come from this entry's facts.
+    if (item[key] && corpus.unsupportedNumbers(item[key], own).length > 0) {
       removed.push(`${path}.${key}: ${item[key]}`);
       item[key] = '';
     }
   }
 
   item.bullets = item.bullets.filter((bullet) => {
-    const cited = bullet.factIds.map((id) => corpus.fact(id)).filter((f): f is Fact => !!f);
+    const cited = bullet.factIds.map((id) => corpus.fact(id)).filter((f): f is Fact => !!f && belongsTo(f, item.id));
     if (cited.length === 0) {
-      removed.push(`${path} bullet without valid facts: ${bullet.text}`);
+      removed.push(`${path} bullet without valid facts of this entry: ${bullet.text}`);
       return false;
     }
     const bad = corpus.unsupportedNumbers(bullet.text, cited);
@@ -235,20 +251,21 @@ function checkExperience(item: ExperienceItem, corpus: Corpus, issues: Issue[], 
 
 function checkEducation(item: EducationItem, corpus: Corpus, issues: Issue[], removed: string[]): EducationItem {
   const path = `education:${item.id}`;
+  const own = corpus.forEntry(item.id);
   for (const key of ['institution', 'degree', 'field'] as const) {
-    if (item[key] && !corpus.hasWords(item[key])) {
+    if (item[key] && !corpus.hasWords(item[key], own)) {
       removed.push(`${path}.${key}: ${item[key]}`);
       item[key] = '';
     }
   }
   for (const key of ['startDate', 'endDate'] as const) {
-    // Dates may be reformatted ("Mar" -> "March", "now" -> "Present"), but years must be real.
-    if (item[key] && corpus.unsupportedNumbers(item[key]).length > 0) {
+    // Dates may be reformatted ("Mar" -> "March", "now" -> "Present"), but years must come from this entry's facts.
+    if (item[key] && corpus.unsupportedNumbers(item[key], own).length > 0) {
       removed.push(`${path}.${key}: ${item[key]}`);
       item[key] = '';
     }
   }
-  if (item.details && corpus.unsupportedNumbers(item.details).length > 0) {
+  if (item.details && corpus.unsupportedNumbers(item.details, own).length > 0) {
     removed.push(`${path}.details: ${item.details}`);
     item.details = '';
   }

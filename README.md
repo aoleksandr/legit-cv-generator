@@ -96,6 +96,7 @@ The design assumes the model will sometimes invent things. The guarantees come f
    - Names, emails, links and locations must appear in the facts; phone numbers are matched by digits.
    - Titles, companies, institutions, degrees and skills must consist of words found in the facts.
    - Dates may be reformatted, but their years must exist in the facts.
+   - **Checks are scoped per entry.** Titles, companies, institutions, dates, education details and bullet citations are checked only against that job's or degree's facts (by the fact's `entry` key), plus facts not tied to any entry. A real employer, year, achievement or number can't migrate from one role to another.
    - Summary sentences with unsupported numbers ("10+ years") are dropped.
    - Anything removed that matters (company, title, dates, name) becomes a question.
 5. **Answers:**
@@ -108,7 +109,6 @@ The design assumes the model will sometimes invent things. The guarantees come f
 
 **Known gaps in the checks** (deliberately simple; noted rather than hidden):
 
-- Years are checked against the whole ledger, not per job, so a real year could be moved to a different role.
 - Word-level checks can't catch a recombination of real words that changes the meaning, or qualitative inflation such as "expert in". The planned Haiku critic pass was for exactly this (see the cuts below).
 - A user's answer is trusted as a fact.
 
@@ -128,7 +128,6 @@ Following "cut features, not reliability":
 ## With more time
 
 - Add the Haiku critic: a cheap pass that flags unsupported qualitative claims in bullets and the summary, and turns them into questions instead of deleting them.
-- Check dates and numbers per entry, using each fact's `entry` key, not only against the whole ledger.
 - Stream progress over SSE instead of polling, and show per-bullet "source" tooltips (the fact ids are already stored).
 - An eval set of real CVs, with known injected hallucinations, to measure how often the checks catch them.
 - Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add Playwright tests for the editor.
