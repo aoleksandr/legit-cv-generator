@@ -1,7 +1,8 @@
 import type { CvDetail } from '@cv/shared';
 import { LlmError } from '../src/ai/cv-llm.js';
 import { JOB_EXPIRE_SECONDS, QueueService } from '../src/queue/queue.service.js';
-import { composition, resetFakeLlm } from '../src/testing/fixtures.js';
+import { logContext } from '../src/common/log-context.js';
+import { composition, extraction, resetFakeLlm } from '../src/testing/fixtures.js';
 import {
   createCv,
   createReadyCv,
@@ -40,6 +41,26 @@ describe('background jobs (e2e)', () => {
 
       expect(seen).toEqual(['processing', 'writing']);
       expect(await getCv(cv.id)).toMatchObject({ status: 'ready', progressStep: null, error: null });
+    });
+
+    it('runs model calls inside the job’s log context, through the Mastra workflow', async () => {
+      const cv = await createCv(user);
+      const seen: Record<string, unknown>[] = [];
+      ctx.llm.extractFacts.mockImplementation(async () => {
+        seen.push(logContext());
+        return extraction();
+      });
+      ctx.llm.composeCv.mockImplementation(async () => {
+        seen.push(logContext());
+        return composition();
+      });
+
+      await runGenerateJob(ctx, cv.id, { retryCount: 1, retryLimit: 2 });
+
+      expect(seen).toEqual([
+        { queue: 'generate-cv', cvId: cv.id, jobAttempt: 2 },
+        { queue: 'generate-cv', cvId: cv.id, jobAttempt: 2 },
+      ]);
     });
 
     it('rethrows a retryable failure so pg-boss retries, and tells the user', async () => {

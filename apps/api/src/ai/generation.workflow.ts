@@ -1,3 +1,4 @@
+import { noopLogger } from '@mastra/core/logger';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import {
   CvDocumentSchema,
@@ -126,7 +127,7 @@ export function buildGenerationWorkflow(
     }),
   });
 
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'generate-cv',
     inputSchema: InputSchema,
     outputSchema: z.custom<GenerationResult>(),
@@ -136,6 +137,9 @@ export function buildGenerationWorkflow(
     .then(compose)
     .then(verifyDraft)
     .commit();
+  // Step failures reach our own logs (job_error); Mastra's plain-text copy would break the JSON stream.
+  workflow.__setLogger(noopLogger);
+  return workflow;
 }
 
 export async function runGeneration(

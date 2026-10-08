@@ -11,7 +11,6 @@ Evaluation priorities: the end-to-end flow works; the system design is sound; fa
 - **Database:** PostgreSQL via **Prisma** (schema and migrations in `apps/api/prisma`).
 - **AI:** **Mastra**, embedded as a library inside the Nest app, not run as a separate Mastra server. All LLM calls go to the Anthropic API (Claude). Model ids come from env:
   - Sonnet (`AI_MODEL_MAIN`) for extraction, composition and applying answers
-  - The planned Haiku critic/question pass was cut (see README); questions come from extraction gaps and the deterministic checks
 - **Background jobs:** **pg-boss**, running on the same Postgres. No Redis.
 - **PDF:** **@react-pdf/renderer**, server-side. A4 page size, embedded fonts, selectable text. No headless browser.
 - **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). The only secret is `ANTHROPIC_API_KEY`, read from `.env`.
@@ -84,7 +83,7 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
    - Receives **only the verified facts** and the target role, never the raw source.
    - Writes concise bullets and a role-targeted summary, and orders experience by relevance.
    - Every bullet references `factIds`.
-4. **Verify output (deterministic; the optional LLM critic was cut, see README):**
+4. **Verify output (deterministic; an LLM critic was decided against, see README):**
    - Bullets must cite existing fact ids.
    - Numbers, dates, company names and emails must appear in the cited facts.
    - Unsupported content is removed and turned into a question.
@@ -132,7 +131,7 @@ Frontend tests follow the testing trophy: mostly integration tests that render t
 - Code is formatted with Prettier (`.prettierrc.json`). Run `pnpm format` before committing; `pnpm format:check` verifies.
 - Tests must never call the real Anthropic API. Mock it at the Mastra agent/model boundary.
 - Possible cuts if time runs short, in order:
-  1. the LLM critic pass (keep the deterministic checks) — **cut**
+  1. the LLM critic pass (keep the deterministic checks) — **decided against** (see README)
   2. bullet reordering in the editor
   3. frontend tests (not cut: integration tests exist)
 

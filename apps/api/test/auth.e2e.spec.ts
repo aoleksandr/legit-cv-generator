@@ -1,3 +1,6 @@
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { DEV_TEST_USER } from '@cv/shared';
 import request from 'supertest';
 import { createTestApp, signUp, type TestContext } from './helpers.js';
 
@@ -76,6 +79,19 @@ describe('auth (e2e)', () => {
     } finally {
       await throttled.app.close();
     }
+  });
+
+  it('the seeded dev account accepts the credentials the login page fills in', async () => {
+    // Runs the real seed (twice: it must be idempotent), then logs in exactly as the dev link does.
+    for (let i = 0; i < 2; i++) {
+      execFileSync('node', ['prisma/seed.ts'], {
+        cwd: resolve(import.meta.dirname, '..'),
+        env: process.env,
+        stdio: 'pipe',
+      });
+    }
+    const res = await http().post('/api/auth/login').send(DEV_TEST_USER).expect(200);
+    expect(res.body.email).toBe(DEV_TEST_USER.email);
   });
 
   it('serves the public health check', async () => {

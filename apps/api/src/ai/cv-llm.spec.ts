@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { composition, FACTS, TARGET_ROLE } from '../testing/fixtures.js';
 
@@ -12,6 +13,7 @@ vi.mock('@mastra/core/agent', () => ({
       agentConfigs.push(opts);
     }
     generate = generate;
+    __setLogger() {}
   },
 }));
 
@@ -78,6 +80,69 @@ describe('MastraCvLlm', () => {
     // Control: the same error is retried when the processor allows it, so the check above is meaningful.
     await expect(new StreamErrorRetryProcessor({ maxRetries: 1, delayMs: 0 }).processAPIError(args)).resolves.toEqual({
       retry: true,
+    });
+  });
+
+  describe('llm_call log lines', () => {
+    /** llm_call lines in the order they were written, whatever the level. */
+    const lines = () =>
+      [vi.mocked(Logger.prototype.log).mock, vi.mocked(Logger.prototype.warn).mock]
+        .flatMap((m) =>
+          m.calls.map(([line], i) => ({ line: line as Record<string, unknown>, order: m.invocationCallOrder[i] })),
+        )
+        .sort((a, b) => a.order - b.order)
+        .map(({ line }) => line)
+        .filter((l) => l?.event === 'llm_call');
+    beforeEach(() => {
+      vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+      vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    });
+    afterEach(() => vi.restoreAllMocks());
+
+    it('logs one line per call with agent, attempt, duration and tokens', async () => {
+      generate.mockResolvedValueOnce({ object: composition(), totalUsage: { inputTokens: 1200, outputTokens: 800 } });
+      await compose();
+      expect(lines()).toEqual([
+        expect.objectContaining({
+          agent: 'cv-composer',
+          attempt: 1,
+          outcome: 'ok',
+          durationMs: expect.any(Number),
+          inputTokens: 1200,
+          outputTokens: 800,
+        }),
+      ]);
+    });
+
+    it('logs the repair attempt separately', async () => {
+      generate.mockResolvedValueOnce({ object: { summary: 42 } }).mockResolvedValueOnce({ object: composition() });
+      await compose();
+      expect(lines().map((l) => [l.attempt, l.outcome])).toEqual([
+        [1, 'invalid_output'],
+        [2, 'ok'],
+      ]);
+    });
+
+    it('logs failures with the user-facing message and whether they are retried', async () => {
+      generate.mockRejectedValueOnce(Object.assign(new Error('overloaded'), { statusCode: 529 }));
+      await compose().catch(() => {});
+      expect(lines()).toEqual([
+        expect.objectContaining({
+          outcome: 'error',
+          retryable: true,
+          error: 'The AI service is temporarily unavailable.',
+        }),
+      ]);
+    });
+
+    it('logs an aborted call', async () => {
+      const ac = new AbortController();
+      generate.mockImplementationOnce(async () => {
+        ac.abort();
+        return { finishReason: 'aborted', object: undefined };
+      });
+      await new MastraCvLlm().composeCv({ facts: FACTS, targetRole: TARGET_ROLE }, ac.signal).catch(() => {});
+      expect(lines().map((l) => l.outcome)).toEqual(['aborted']);
     });
   });
 

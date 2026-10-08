@@ -82,7 +82,7 @@ What it showed:
 
 - The hard guarantees held on every run.
 - Output varies between runs. One run turned vague input into a role with 4 cautious bullets, the next into no roles and 7 questions. Both are acceptable, but one run is a sample.
-- Filler sometimes gets through, despite the prompt: "track record" in one run, "focused on improving product experiences through iterative testing" in another. This is the remaining gap, and what the cut critic pass would address.
+- Filler sometimes gets through, despite the prompt: "track record" in one run, "focused on improving product experiences through iterative testing" in another. This is the remaining gap: wording, not invented facts (see why there's no LLM critic below).
 - The checks are occasionally over-strict: the skill "Usability Testing" was removed because the source says "usability tests".
 
 ## Architecture
@@ -123,6 +123,7 @@ The main decisions:
   - Login and signup are rate-limited, and so is generation (10 per hour).
   - Login takes about the same time for unknown emails (a dummy hash is verified).
 - **Concurrency.** Edits carry `version`, and a stale write gets **409**. The editor autosaves with a debounce, one save at a time; on a 409 it reverts to the server version and explains why in a toast. When an answer is applied while the user is editing, the worker locks the row and splices **only the answered section** into the latest content, so neither side's change is lost.
+- **Logging.** pino via `nestjs-pino`: JSON lines in Docker, readable lines in local dev, silent in tests (`DEBUG=1` to see them). Every line written during a job carries its `queue`, `cvId` or `questionId`, and `jobAttempt`, without passing ids around. Each model call logs one `llm_call` line: agent, attempt (first try or repair), outcome, duration and tokens. Each job logs a `job_finished` line with its outcome and duration. The session cookie is redacted from request logs, and the 2-second CV polling and health checks aren't logged. Example: `docker compose logs api | grep llm_call`.
 - **PDF.** `@react-pdf/renderer` on the server (no headless browser): A4, embedded Inter font, selectable text. For uploads, only the extracted text is stored, never the file.
 
 ## How the AI is kept from inventing facts
@@ -154,18 +155,14 @@ The design assumes the model will sometimes invent things. The guarantees come f
 
 **Known gaps in the checks** (deliberately simple; noted rather than hidden):
 
-- Word-level checks can't catch a recombination of real words that changes the meaning, or qualitative inflation such as "expert in". The planned Haiku critic pass was for exactly this (see the cuts below).
-- A user's answer is trusted as a fact.
+- Word-level checks can't catch a recombination of real words that changes the meaning, or qualitative inflation such as "expert in". That's a deliberate trade-off (see "No LLM critic" below).
 
 ## What I simplified or cut
 
 Following "cut features, not reliability":
 
-- **The LLM critic pass was cut** (cut #1 in the plan). The plan had a cheap Haiku pass after the deterministic checks, asking of each bullet and summary sentence: "is every claim supported by these facts?"
-  - The deterministic checks verify tokens (numbers, years, names, cited fact ids), not meaning. So "Maintained internal tools" can still become "Led development of the internal tooling platform", and the summary can pick up filler.
-  - The eval saw filler in 2 of 18 generations and no invented facts. Questions, also planned as a Haiku pass, come from the extractor's gaps and the deterministic checks instead.
-  - Everything runs on one model (`AI_MODEL_MAIN`).
-- **Only one prompt-injection defence:** delimiting plus deterministic verification. There is no separate classifier.
+- **No LLM critic, by choice.** Code already blocks invented facts: any number, date, name or email not in the source is removed. A critic would only fix wording, like filler or "maintained" turning into "led". The eval found filler in 2 of 18 CVs and no invented facts, and the user can edit any sentence, so it isn't worth an extra model call per CV. Questions come from the extraction step and the code checks, so the app uses one model. I'd revisit this only if the eval showed a real problem, for example bullets that link two true facts in a false way.
+- **No prompt-injection classifier.** The model can't take actions, and code removes anything not backed by the source, so injected text can't add facts. The only person who could inject text is the user, about their own CV. A classifier would mostly flag real CVs that mention the topic.
 - **Scanned PDFs are rejected** with a clear message rather than OCR'd. Text extraction loses layout (columns can interleave), which the extractor usually tolerates.
 - **One API process runs both HTTP and the worker.** That's fine here; in production they would be separate deployments of the same image (`WORKER_ENABLED=false` already exists for this).
 - **Rate limits are in memory, per process, and keyed by IP.**
@@ -174,17 +171,16 @@ Following "cut features, not reliability":
 
 ## With more time
 
-- Add the Haiku critic: a cheap pass that flags unsupported qualitative claims in bullets and the summary, and turns them into questions instead of deleting them. The eval already shows where it's needed (filler in the summary) and would measure it before and after.
 - Grow the eval: more cases, several runs per case to measure variance, and an LLM-judged filler score instead of a word list.
 - Stream progress over SSE instead of polling, and show per-bullet "source" tooltips (the fact ids are already stored).
 - An eval set of real CVs, with known injected hallucinations, to measure how often the checks catch them.
 - Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add a few Playwright end-to-end tests (the top of the trophy) against the real stack.
+- Add observability via LangFuse (decided not to because it adds secrets to the .env file and complicates the review). Opted for simple logging with pino instead
 
 ## How I used AI tools
 
-<!-- TODO(author): describe your own process; the points below are only what the repo shows. -->
-
-- I built it with Claude Code. Before writing any code, I wrote the plan and the constraints into `CLAUDE.md`: stack, data model, the anti-hallucination pipeline, and what must not be cut. That file steered every session.
-- The work went module by module, roughly one commit each (see `git log`).
+- I built it with Claude Code. Before writing any code, I wrote the plan and the constraints into `CLAUDE.md`: stack, data model, the anti-hallucination pipeline, and what must not be cut. That file steered every session. All architectural decisions made by me (using db as a queue,
+  using mastra, tanstack-query, prettifier, etc.)
+- The work went module by module, roughly one commit each.
 - Writing the tests surfaced real limitations of the grounding checks. They are listed above rather than worked around.
-- TODO: what you reviewed or rewrote by hand, where the AI got it wrong, and what you would not delegate.
+- All the code was reviewed and checked manually. When in doubt, I consulted claude, especially on the need of the classifier. The decision is mainly based on the scope of the project (didn't want to blow up the scope)

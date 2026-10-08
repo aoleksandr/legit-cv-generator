@@ -3,10 +3,11 @@ import type { JobWithMetadata } from 'pg-boss';
 import { applyAnswer, splicePart } from '../ai/apply-answer.js';
 import { CV_LLM, LlmError, type CvLlm } from '../ai/cv-llm.js';
 import { runGeneration } from '../ai/generation.workflow.js';
+import { withLogContext } from '../common/log-context.js';
 import { config } from '../config.js';
 import { readContent, readFacts } from '../cvs/cv.mapper.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { JOB_EXPIRE_SECONDS, QUEUES, QueueService } from '../queue/queue.service.js';
+import { JOB_EXPIRE_SECONDS, QUEUES, QueueService, type QueueName } from '../queue/queue.service.js';
 
 interface GenerateJob {
   cvId: string;
@@ -22,6 +23,9 @@ interface ApplyAnswerJob {
 type JobAttempt<T> = Pick<JobWithMetadata<T>, 'data' | 'retryCount' | 'retryLimit'> & { signal?: AbortSignal };
 
 const TOOK_TOO_LONG = 'This took too long. Please try again.';
+
+/** How a job attempt ended, for the `job_finished` log line. A thrown attempt is logged as `will_retry`. */
+type JobOutcome = 'done' | 'failed' | 'skipped' | 'superseded';
 
 const SWEEP_INTERVAL_MS = 60_000;
 /** A CV still "queued" after this long has lost its job (e.g. enqueue raced a crash). */
@@ -60,10 +64,14 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
   // CV generation
   // -------------------------------------------------------------------------
 
-  async handleGenerate(job: JobAttempt<GenerateJob>) {
+  handleGenerate(job: JobAttempt<GenerateJob>): Promise<void> {
+    return this.runJob(QUEUES.generate, { cvId: job.data.cvId }, job, () => this.generate(job));
+  }
+
+  private async generate(job: JobAttempt<GenerateJob>): Promise<JobOutcome> {
     const { cvId } = job.data;
     const cv = await this.prisma.cv.findUnique({ where: { id: cvId } });
-    if (!cv || cv.status === 'ready') return;
+    if (!cv || cv.status === 'ready') return 'skipped';
 
     await this.prisma.cv.update({
       where: { id: cvId },
@@ -87,12 +95,8 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         },
         job.signal,
       );
-      if (this.supersededBy(job)) return;
-      if (result.removed.length) {
-        this.logger.log(
-          `CV ${cvId}: grounding removed ${result.removed.length} item(s):\n  ${result.removed.join('\n  ')}`,
-        );
-      }
+      if (this.supersededBy(job)) return 'superseded';
+      this.logRemoved(result.removed);
 
       await this.prisma.$transaction([
         this.prisma.cvQuestion.deleteMany({ where: { cvId } }),
@@ -112,18 +116,23 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         }),
       ]);
     } catch (err) {
-      await this.onJobError(err, job, record);
+      return this.onJobError(err, job, record);
     }
+    return 'done';
   }
 
   // -------------------------------------------------------------------------
   // Applying an answer to one part of the CV
   // -------------------------------------------------------------------------
 
-  async handleApplyAnswer(job: JobAttempt<ApplyAnswerJob>) {
+  handleApplyAnswer(job: JobAttempt<ApplyAnswerJob>): Promise<void> {
+    return this.runJob(QUEUES.applyAnswer, { questionId: job.data.questionId }, job, () => this.applyAnswer(job));
+  }
+
+  private async applyAnswer(job: JobAttempt<ApplyAnswerJob>): Promise<JobOutcome> {
     const { questionId } = job.data;
     const question = await this.prisma.cvQuestion.findUnique({ where: { id: questionId }, include: { cv: true } });
-    if (!question || !question.applying || question.answer == null) return;
+    if (!question || !question.applying || question.answer == null) return 'skipped';
     const cv = question.cv;
     const content = readContent(cv);
     if (!content) {
@@ -131,7 +140,7 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         where: { id: questionId },
         data: { applying: false, error: 'The CV has no content to update.' },
       });
-      return;
+      return 'failed';
     }
 
     const record = async (message: string, final: boolean) => {
@@ -155,10 +164,8 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         },
         job.signal,
       );
-      if (this.supersededBy(job)) return;
-      if (result.removed.length) {
-        this.logger.log(`Answer ${questionId}: grounding removed:\n  ${result.removed.join('\n  ')}`);
-      }
+      if (this.supersededBy(job)) return 'superseded';
+      this.logRemoved(result.removed);
 
       await this.prisma.$transaction(async (tx) => {
         // Lock the row: manual edits that landed while the model was working must not be lost.
@@ -179,11 +186,40 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         });
       });
     } catch (err) {
-      await this.onJobError(err, job, record);
+      return this.onJobError(err, job, record);
     }
+    return 'done';
   }
 
   // -------------------------------------------------------------------------
+
+  /**
+   * Runs one job attempt with its ids in the log context (so every line inside,
+   * including each `llm_call`, carries them) and logs how it ended.
+   */
+  private runJob(
+    queue: QueueName,
+    ids: Record<string, string>,
+    job: { retryCount: number; retryLimit: number },
+    fn: () => Promise<JobOutcome>,
+  ): Promise<void> {
+    // `jobAttempt`, not `attempt`: llm_call lines have their own attempt (first try or repair).
+    return withLogContext({ queue, ...ids, jobAttempt: job.retryCount + 1 }, async () => {
+      const started = Date.now();
+      let outcome: JobOutcome | 'will_retry' = 'will_retry';
+      try {
+        outcome = await fn();
+      } finally {
+        this.logger.log({ msg: `job ${outcome}`, event: 'job_finished', outcome, durationMs: Date.now() - started });
+      }
+    });
+  }
+
+  /** What the grounding checks removed: the most useful line when a CV looks thinner than expected. */
+  private logRemoved(removed: string[]) {
+    if (removed.length)
+      this.logger.log({ msg: 'grounding removed content', event: 'grounding_removed', count: removed.length, removed });
+  }
 
   /**
    * Non-retryable errors (bad input, auth) fail immediately with a readable
@@ -194,24 +230,35 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
     err: unknown,
     job: { retryCount: number; retryLimit: number; signal?: AbortSignal },
     record: (message: string, final: boolean) => Promise<void>,
-  ) {
+  ): Promise<JobOutcome> {
     if (job.signal?.aborted) {
-      if (this.supersededBy(job)) return;
+      if (this.supersededBy(job)) return 'superseded';
       // The last attempt expired: pg-boss won't retry it, so nobody else will record the failure.
-      this.logger.warn(`Job aborted on its last attempt: ${String(job.signal.reason)}`);
+      this.logger.warn({
+        msg: 'job aborted on its last attempt',
+        event: 'job_aborted',
+        reason: String(job.signal.reason),
+      });
       await record(TOOK_TOO_LONG, true);
-      return;
+      return 'failed';
     }
     const llmError = err instanceof LlmError ? err : null;
     const retryable = llmError ? llmError.retryable : true;
     const final = !retryable || job.retryCount >= job.retryLimit;
     const message = llmError?.message ?? 'Something went wrong while processing your CV.';
 
-    this.logger.error(
-      `Job failed (attempt ${job.retryCount + 1}/${job.retryLimit + 1}, final=${final}): ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`,
-    );
+    this.logger.error({
+      msg: final ? 'job failed' : 'job attempt failed, will retry',
+      event: 'job_error',
+      final,
+      retryable,
+      maxAttempts: job.retryLimit + 1,
+      userMessage: message,
+      err,
+    });
     await record(message, final);
     if (!final) throw err;
+    return 'failed';
   }
 
   /**
@@ -221,9 +268,11 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
    */
   private supersededBy(job: { retryCount: number; retryLimit: number; signal?: AbortSignal }): boolean {
     if (!job.signal?.aborted || job.retryCount >= job.retryLimit) return false;
-    this.logger.warn(
-      `Job attempt ${job.retryCount + 1} was aborted (${String(job.signal.reason)}); leaving it to the retry`,
-    );
+    this.logger.warn({
+      msg: 'job attempt aborted, leaving it to the retry',
+      event: 'job_superseded',
+      reason: String(job.signal.reason),
+    });
     return true;
   }
 
@@ -251,7 +300,8 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         take: 100,
       });
       for (const { id } of staleAnswers) await this.queue.send(QUEUES.applyAnswer, { questionId: id }, id);
-      if (stale.length) this.logger.warn(`Re-enqueued ${stale.length} stale CV job(s)`);
+      if (stale.length)
+        this.logger.warn({ msg: 're-enqueued stale CV jobs', event: 'sweep_requeued', count: stale.length });
     } catch (err) {
       this.logger.error(`Sweep failed: ${err instanceof Error ? err.message : String(err)}`);
     }

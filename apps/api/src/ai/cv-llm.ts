@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { Agent } from '@mastra/core/agent';
+import { noopLogger } from '@mastra/core/logger';
 import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 import type { Fact } from '@cv/shared';
 import type { z } from 'zod';
@@ -92,6 +93,9 @@ export class MastraCvLlm implements CvLlm {
       model: main,
       errorProcessors: errorProcessors(),
     });
+    // Mastra logs to the console in its own plain-text format; failures are already in our JSON
+    // lines (llm_call, job_error with the full error), so keep the log stream clean.
+    for (const agent of [this.extractor, this.composer, this.answerer]) agent.__setLogger(noopLogger);
   }
 
   extractFacts({ sourceText, targetRole }: { sourceText: string; targetRole: string }, signal?: AbortSignal) {
@@ -155,8 +159,13 @@ export class MastraCvLlm implements CvLlm {
     let messages = prompt;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS_PER_CALL; attempt++) {
       throwIfAborted(signal);
+      const started = Date.now();
+      const log = (outcome: LlmCallOutcome, fields: Record<string, unknown> = {}) =>
+        this.logCall({ agent: agent.id, attempt, outcome, durationMs: Date.now() - started, ...fields });
+
+      let res: Awaited<ReturnType<Agent['generate']>>;
       try {
-        const res = await agent.generate(messages, {
+        res = await agent.generate(messages, {
           abortSignal: signal,
           structuredOutput: { schema },
           modelSettings: {
@@ -165,31 +174,65 @@ export class MastraCvLlm implements CvLlm {
             timeout: { totalMs: config.llmTimeoutMs },
           },
         });
-        // An aborted run resolves (finishReason "aborted", no object) rather than throwing.
-        throwIfAborted(signal);
-        const parsed = schema.safeParse(res.object);
-        if (parsed.success) return parsed.data;
-        lastError = parsed.error;
-        this.logger.warn(
-          `${agent.id}: invalid structured output (attempt ${attempt}): ${parsed.error.message.slice(0, 500)}`,
-        );
-        messages = `${prompt}\n\nYour previous response did not match the required schema: ${parsed.error.message.slice(0, 1000)}\nReturn a valid response.`;
       } catch (err) {
-        throwIfAborted(signal);
+        if (signal?.aborted) {
+          log('aborted');
+          throw cancelled(signal);
+        }
         if (isSchemaFailure(err) && attempt === 1) {
+          log('invalid_output', { error: errorText(err) });
           lastError = err;
-          this.logger.warn(`${agent.id}: structured output failed validation, retrying once`);
           continue;
         }
-        throw toLlmError(err);
+        const llmError = toLlmError(err);
+        log('error', { error: llmError.message, retryable: llmError.retryable, cause: errorText(err) });
+        throw llmError;
       }
+
+      const usage = tokenUsage(res);
+      // An aborted run resolves (finishReason "aborted", no object) rather than throwing.
+      if (signal?.aborted) {
+        log('aborted', usage);
+        throw cancelled(signal);
+      }
+      const parsed = schema.safeParse(res.object);
+      if (parsed.success) {
+        log('ok', usage);
+        return parsed.data;
+      }
+      log('invalid_output', { ...usage, error: parsed.error.message.slice(0, 500) });
+      lastError = parsed.error;
+      messages = `${prompt}\n\nYour previous response did not match the required schema: ${parsed.error.message.slice(0, 1000)}\nReturn a valid response.`;
     }
     throw new LlmError('The AI returned an invalid response. Please try again.', true, { cause: lastError });
   }
+
+  /** One structured line per model call: what ran, how long it took, what it cost, how it ended. */
+  private logCall(fields: { agent: string; attempt: number; outcome: LlmCallOutcome; durationMs: number }) {
+    const line = { msg: `llm call ${fields.outcome}`, event: 'llm_call', model: config.models.main, ...fields };
+    if (fields.outcome === 'ok') this.logger.log(line);
+    else this.logger.warn(line);
+  }
+}
+
+type LlmCallOutcome = 'ok' | 'invalid_output' | 'error' | 'aborted';
+
+function cancelled(signal: AbortSignal): LlmError {
+  return new LlmError('The AI request was cancelled.', true, { cause: signal.reason });
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new LlmError('The AI request was cancelled.', true, { cause: signal.reason });
+  if (signal?.aborted) throw cancelled(signal);
+}
+
+/** Token counts across the whole call (all steps, including provider retries that got a response). */
+function tokenUsage(res: { totalUsage?: unknown; usage?: unknown }): { inputTokens?: number; outputTokens?: number } {
+  const usage = (res.totalUsage ?? res.usage) as { inputTokens?: number; outputTokens?: number } | undefined;
+  return { inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens };
+}
+
+function errorText(err: unknown): string {
+  return (err instanceof Error ? `${err.name}: ${err.message}` : String(err)).slice(0, 500);
 }
 
 function isSchemaFailure(err: unknown): boolean {
