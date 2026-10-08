@@ -9,7 +9,7 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "declaration": false,
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "multer", "vitest/globals"]
   },
   "include": ["src"]
 }

@@ -52,21 +52,23 @@ The `CvDocument` Zod schema in `packages/shared` is the **single source of truth
 - `users`: id, email (unique, lowercased), password_hash, created_at
 - `cvs`:
   - identity and input: id, user_id, title, target_role, source_type (`pdf` | `text`), source_text
-  - results: content (jsonb `CvDocument`, which includes the fact ledger)
+  - results: content (jsonb `CvDocument`), facts (jsonb `Fact[]`, the verified fact ledger; kept out of `content` so manual edits can't touch it)
   - job state: status (`queued` | `processing` | `ready` | `failed`), progress_step, error
   - version (optimistic locking) and timestamps
-- `cv_questions`: id, cv_id, field_path (e.g. `experience[1].bullets`), question, answer, status (`open` | `answered` | `dismissed`)
+- `cv_questions`: id, cv_id, field_path, question, answer, status (`open` | `answered` | `dismissed`), applying (answer job in flight), error
+- `field_path` format (see `parseFieldPath` in `@cv/shared`): `contact` | `summary` | `skills` | `experience` | `education` | `experience:<entryId>` | `education:<entryId>`. Entry ids come from the fact `entry` keys (`exp_1`, `edu_1`).
 
 ## Async generation (reload-safe)
 
-1. `POST /cvs` creates the CV row (`queued`) **and** enqueues the pg-boss job in one transaction, then returns the id right away.
-2. The frontend polls `GET /cvs/:id` (1–2 s) while the status is `queued` or `processing`. It shows the step: Extracting → Structuring → Writing → Verifying.
+1. `POST /cvs` creates the CV row (`queued`) **and** enqueues the pg-boss job in one transaction (`fromPrisma(tx)` adapter), then returns the id right away.
+2. The frontend polls `GET /cvs/:id` (1–2 s) while the status is `queued` or `processing`. It shows the step (`progress_step`): extracting → verifying → writing → checking.
 3. All state lives in the database, so a reload or another device simply resumes polling. The job does not depend on the browser.
 4. Failure handling:
    - LLM calls have timeouts and retry with backoff.
    - pg-boss retries jobs a limited number of times.
    - When retries are exhausted, the status becomes `failed` with a human-readable error, and the UI offers a Retry button.
-   - On boot, jobs stuck in `processing` are re-queued.
+   - A crashed worker's job expires (15 min) and pg-boss retries it. A sweeper (on boot and every minute) re-enqueues CVs left `queued`/`processing` too long; queues use the `exclusive` policy with `singletonKey` = CV/question id, so this never duplicates work.
+   - Mastra serialises errors thrown inside workflow steps, which loses the `LlmError` class and its `retryable` flag. `runGeneration` therefore rethrows the original error that a step recorded.
 
 ## Anti-hallucination design (core requirement, do not weaken)
 
@@ -111,7 +113,7 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
 
 1. Grounding and verification logic (unit tests): quote matching, stripping unsupported numbers and companies, rejecting bullets without fact ids.
 2. Workflow with a **mocked LLM**: happy path, invalid output leading to repair and then failure, gaps becoming questions.
-3. API e2e (Jest + supertest against a test Postgres): auth, **ownership isolation**, the 409 version conflict, upload validation.
+3. API e2e (Vitest + supertest against a test Postgres): auth, **ownership isolation**, the 409 version conflict, upload validation.
 4. Job failure and retry behaviour.
 
 Frontend tests are optional and low priority.
