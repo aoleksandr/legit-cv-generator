@@ -42,11 +42,13 @@ export const config = {
   /** Per LLM call. Generation of a long CV can legitimately take a while. */
   llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 180_000),
   /**
-   * pino level. Tests are silent unless DEBUG is set; in Docker (NODE_ENV=production)
-   * logs are JSON lines, elsewhere pretty-printed.
+   * pino level. Tests are silent unless DEBUG is set; in Docker (LOG_PRETTY=false, since
+   * pino-pretty is a dev dependency) logs are JSON lines, elsewhere pretty-printed.
    */
   logLevel: process.env.LOG_LEVEL ?? (process.env.NODE_ENV === 'test' && !process.env.DEBUG ? 'silent' : 'info'),
-  prettyLogs: process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test',
+  prettyLogs: process.env.LOG_PRETTY
+    ? process.env.LOG_PRETTY === 'true'
+    : process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'test',
   /** Disable the background worker (used by e2e tests that drive jobs manually). */
   workerEnabled: process.env.WORKER_ENABLED !== 'false',
 } as const;

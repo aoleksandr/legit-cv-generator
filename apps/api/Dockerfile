@@ -24,6 +24,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM base AS runtime
 ENV NODE_ENV=production
 ENV PRISMA_HIDE_UPDATE_MESSAGE=1
+# JSON log lines; pino-pretty is a dev dependency and not in this image.
+ENV LOG_PRETTY=false
 COPY --from=build /app/node_modules node_modules
 COPY --from=build /app/packages/shared/package.json packages/shared/
 COPY --from=build /app/packages/shared/dist packages/shared/dist
@@ -38,5 +40,6 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=3s --start-period=20s --retries=10 \
   CMD node -e "fetch('http://localhost:3000/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
-# Apply pending migrations, then exec node so it receives SIGTERM directly (graceful pg-boss shutdown).
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && exec node dist/main.js"]
+# Apply pending migrations, seed the test account outside production, then exec node so it
+# receives SIGTERM directly (graceful pg-boss shutdown).
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && { [ \"$NODE_ENV\" = production ] || node prisma/seed.ts; } && exec node dist/main.js"]

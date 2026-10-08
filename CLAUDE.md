@@ -13,7 +13,7 @@ Evaluation priorities: the end-to-end flow works; the system design is sound; fa
   - Sonnet (`AI_MODEL_MAIN`) for extraction, composition and applying answers
 - **Background jobs:** **pg-boss**, running on the same Postgres. No Redis.
 - **PDF:** **@react-pdf/renderer**, server-side. A4 page size, embedded fonts, selectable text. No headless browser.
-- **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). Secrets come from `.env`: `ANTHROPIC_API_KEY` and `JWT_SECRET`. In production (`NODE_ENV=production`) the API refuses to start without a real `JWT_SECRET`; dev and tests fall back to a built-in one.
+- **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). `APP_ENV` (`development` by default, or `production`) picks the mode for both images: development shows "Use test account" on the login page, seeds that account on boot and allows the built-in JWT secret. Secrets come from `.env`: `ANTHROPIC_API_KEY`, plus `JWT_SECRET` in production, where the API refuses to start without a real one.
 - **Package manager:** pnpm workspaces.
 
 ## Repo layout

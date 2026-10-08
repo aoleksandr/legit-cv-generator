@@ -5,11 +5,13 @@ Sign in, paste your background or upload a PDF CV, name a target role, and get a
 ## Running it
 
 ```bash
-cp .env.example .env            # set ANTHROPIC_API_KEY, and JWT_SECRET=$(openssl rand -hex 32)
-docker compose up --build       # then open http://localhost:8080
+cp .env.example .env            # set ANTHROPIC_API_KEY
+docker compose up --build       # then open http://localhost:8080 and click "Use test account"
 ```
 
-Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. It needs two secrets from `.env`: `ANTHROPIC_API_KEY`, and `JWT_SECRET` (at least 32 characters). The API refuses to start without a real `JWT_SECRET`, because a known one lets anyone forge a session. Local `pnpm dev` falls back to a dev-only value. The model defaults to `claude-sonnet-5` and can be overridden with `AI_MODEL_MAIN`.
+Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. The model defaults to `claude-sonnet-5` and can be overridden with `AI_MODEL_MAIN`.
+
+By default it builds in **development mode**: the same compiled images as production, but the login page offers "Use test account" (`test@example.com` / `password123`, seeded on every boot), and the API uses a built-in session secret. For a **production** build, set `JWT_SECRET` in `.env` (`openssl rand -hex 32`, at least 32 characters) and run `APP_ENV=production docker compose up --build`. That build has no test account, and the API refuses to start without a real `JWT_SECRET`, because a known one lets anyone forge a session.
 
 **Local development** (Node 22+, pnpm 10):
 

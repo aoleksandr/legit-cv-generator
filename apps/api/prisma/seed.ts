@@ -1,6 +1,6 @@
 /**
  * Development seed: creates the DEV_TEST_USER account (idempotent).
- * Run with `pnpm db:seed`; never part of the Docker / production boot.
+ * Run with `pnpm db:seed`; the development Docker build runs it on every boot.
  */
 import { DEV_TEST_USER } from '@cv/shared';
 import * as argon2 from 'argon2';

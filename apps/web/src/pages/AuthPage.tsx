@@ -78,8 +78,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           />
           {!isLogin && <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>}
         </div>
-        {import.meta.env.DEV && isLogin && (
-          // Dev-only shortcut; Vite replaces import.meta.env.DEV with false in production builds.
+        {import.meta.env.MODE !== 'production' && isLogin && (
+          // Dev-only shortcut: shown by `vite`, tests and the development Docker build (`--mode development`).
+          // Vite inlines MODE, so a production build drops this code entirely.
           <button
             type="button"
             className="text-sm font-medium text-indigo-600 hover:underline"

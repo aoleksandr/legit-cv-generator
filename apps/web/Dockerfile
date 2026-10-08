@@ -13,7 +13,10 @@ COPY apps/web/package.json apps/web/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --filter @cv/web...
 COPY packages/shared packages/shared
 COPY apps/web apps/web
-RUN pnpm --filter @cv/shared build && pnpm --filter @cv/web build
+# "development" keeps dev-only UI (the "Use test account" button); see docker-compose.yml.
+ARG APP_ENV=production
+RUN case "$APP_ENV" in development|production) ;; *) echo "APP_ENV must be development or production, got '$APP_ENV'" >&2; exit 1;; esac \
+  && pnpm --filter @cv/shared build && pnpm --filter @cv/web build --mode "$APP_ENV"
 
 FROM nginx:1.29-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
