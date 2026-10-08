@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { CredentialsSchema } from '@cv/shared';
+import { CredentialsSchema, DEV_TEST_USER } from '@cv/shared';
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router';
 import { api } from '../api';
@@ -31,7 +31,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
     const parsed = CredentialsSchema.safeParse({ email, password });
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
-      setFormError(issue.path[0] === 'password' ? 'Password must be at least 8 characters.' : 'Enter a valid email address.');
+      setFormError(
+        issue.path[0] === 'password' ? 'Password must be at least 8 characters.' : 'Enter a valid email address.',
+      );
       return;
     }
     setFormError(null);
@@ -47,11 +49,23 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           <p className="mt-1 text-sm text-slate-500">AI CV Builder</p>
         </div>
         <div>
-          <label className="label" htmlFor="email">Email</label>
-          <input id="email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label className="label" htmlFor="email">
+            Email
+          </label>
+          <input
+            id="email"
+            className="input"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
         </div>
         <div>
-          <label className="label" htmlFor="password">Password</label>
+          <label className="label" htmlFor="password">
+            Password
+          </label>
           <input
             id="password"
             className="input"
@@ -64,13 +78,31 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           />
           {!isLogin && <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>}
         </div>
+        {import.meta.env.DEV && isLogin && (
+          // Dev-only shortcut; Vite replaces import.meta.env.DEV with false in production builds.
+          <button
+            type="button"
+            className="text-sm font-medium text-indigo-600 hover:underline"
+            onClick={() => {
+              setEmail(DEV_TEST_USER.email);
+              setPassword(DEV_TEST_USER.password);
+              setFormError(null);
+            }}
+          >
+            Use test account
+          </button>
+        )}
         {formError ? <ErrorBanner>{formError}</ErrorBanner> : <ErrorBanner error={mutation.error} />}
         <button className="btn-primary w-full" disabled={mutation.isPending}>
           {isLogin ? 'Sign in' : 'Sign up'}
         </button>
         <p className="text-center text-sm text-slate-500">
           {isLogin ? "Don't have an account? " : 'Already have an account? '}
-          <Link className="font-medium text-indigo-600 hover:underline" to={isLogin ? '/signup' : '/login'} state={location.state}>
+          <Link
+            className="font-medium text-indigo-600 hover:underline"
+            to={isLogin ? '/signup' : '/login'}
+            state={location.state}
+          >
             {isLogin ? 'Sign up' : 'Sign in'}
           </Link>
         </p>

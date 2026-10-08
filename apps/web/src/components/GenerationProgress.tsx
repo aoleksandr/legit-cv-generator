@@ -15,7 +15,8 @@ export function GenerationProgress({ cv }: { cv: CvDetail }) {
         <div>
           <h2 className="font-semibold">{cv.status === 'queued' ? 'Waiting to start…' : 'Generating your CV…'}</h2>
           <p className="text-sm text-slate-500">
-            This can take a minute or two. You can leave this page or close the tab. Your CV will be here when you come back.
+            This can take a minute or two. You can leave this page or close the tab. Your CV will be here when you come
+            back.
           </p>
         </div>
       </div>
@@ -26,7 +27,11 @@ export function GenerationProgress({ cv }: { cv: CvDetail }) {
             <li key={step.key} className="flex items-center gap-3 text-sm">
               <span
                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${
-                  state === 'done' ? 'bg-emerald-500 text-white' : state === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
+                  state === 'done'
+                    ? 'bg-emerald-500 text-white'
+                    : state === 'active'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-slate-200 text-slate-500'
                 }`}
               >
                 {state === 'done' ? '✓' : i + 1}

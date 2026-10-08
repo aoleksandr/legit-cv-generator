@@ -30,7 +30,17 @@ export function CvEditor({ draft, update }: { draft: CvDocument; update: Update 
   );
 }
 
-function Section({ title, id, actions, children }: { title: string; id: string; actions?: ReactNode; children: ReactNode }) {
+function Section({
+  title,
+  id,
+  actions,
+  children,
+}: {
+  title: string;
+  id: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section id={id} className="card scroll-mt-20 p-4 sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -51,11 +61,41 @@ function Field({ label, children, className = '' }: { label: string; children: R
   );
 }
 
-function TextInput({ value, onChange, placeholder, maxLength = 200 }: { value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number }) {
-  return <input className="input" value={value} placeholder={placeholder} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} />;
+function TextInput({
+  value,
+  onChange,
+  placeholder,
+  maxLength = 200,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+}) {
+  return (
+    <input
+      className="input"
+      value={value}
+      placeholder={placeholder}
+      maxLength={maxLength}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
 }
 
-function AutoTextarea({ value, onChange, placeholder, maxLength, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; maxLength?: number; rows?: number }) {
+function AutoTextarea({
+  value,
+  onChange,
+  placeholder,
+  maxLength,
+  rows = 3,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  maxLength?: number;
+  rows?: number;
+}) {
   return (
     <textarea
       className="input field-sizing-content min-h-16 resize-y"
@@ -68,9 +108,26 @@ function AutoTextarea({ value, onChange, placeholder, maxLength, rows = 3 }: { v
   );
 }
 
-function IconButton({ label, onClick, children, disabled }: { label: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
+function IconButton({
+  label,
+  onClick,
+  children,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" className="btn-ghost h-8 w-8 p-0" aria-label={label} title={label} onClick={onClick} disabled={disabled}>
+    <button
+      type="button"
+      className="btn-ghost h-8 w-8 p-0"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {children}
     </button>
   );
@@ -115,14 +172,27 @@ function ContactSection({ draft, update }: { draft: CvDocument; update: Update }
 function ExperienceSection({ draft, update }: { draft: CvDocument; update: Update }) {
   const add = () =>
     update((d) => {
-      d.experience.push({ id: newId('exp'), title: '', company: '', location: '', startDate: '', endDate: '', bullets: [] });
+      d.experience.push({
+        id: newId('exp'),
+        title: '',
+        company: '',
+        location: '',
+        startDate: '',
+        endDate: '',
+        bullets: [],
+      });
     });
   return (
     <Section
       title="Experience"
       id="section-experience"
       actions={
-        <button type="button" className="btn-secondary px-3 py-1" onClick={add} disabled={draft.experience.length >= 50}>
+        <button
+          type="button"
+          className="btn-secondary px-3 py-1"
+          onClick={add}
+          disabled={draft.experience.length >= 50}
+        >
           Add role
         </button>
       }
@@ -137,7 +207,17 @@ function ExperienceSection({ draft, update }: { draft: CvDocument; update: Updat
   );
 }
 
-function ExperienceEntry({ item, index, count, update }: { item: ExperienceItem; index: number; count: number; update: Update }) {
+function ExperienceEntry({
+  item,
+  index,
+  count,
+  update,
+}: {
+  item: ExperienceItem;
+  index: number;
+  count: number;
+  update: Update;
+}) {
   const [open, setOpen] = useState(true);
   const set = (fn: (e: ExperienceItem) => void) => update((d) => fn(d.experience[index]));
   const heading = [item.title, item.company].filter(Boolean).join(' · ') || 'New role';
@@ -145,13 +225,35 @@ function ExperienceEntry({ item, index, count, update }: { item: ExperienceItem;
   return (
     <div id={`entry-${item.id}`} className="scroll-mt-20 rounded-lg border border-slate-200">
       <div className="flex items-center gap-1 border-b border-slate-100 px-3 py-2">
-        <button type="button" className="min-w-0 flex-1 truncate text-left text-sm font-medium" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <button
+          type="button"
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+        >
           <span className="mr-1 inline-block w-3 text-slate-400">{open ? '▾' : '▸'}</span>
           {heading}
         </button>
-        <IconButton label="Move up" onClick={() => update((d) => move(d.experience, index, index - 1))} disabled={index === 0}>↑</IconButton>
-        <IconButton label="Move down" onClick={() => update((d) => move(d.experience, index, index + 1))} disabled={index === count - 1}>↓</IconButton>
-        <IconButton label="Remove role" onClick={() => confirm(`Remove "${heading}"?`) && update((d) => void d.experience.splice(index, 1))}>✕</IconButton>
+        <IconButton
+          label="Move up"
+          onClick={() => update((d) => move(d.experience, index, index - 1))}
+          disabled={index === 0}
+        >
+          ↑
+        </IconButton>
+        <IconButton
+          label="Move down"
+          onClick={() => update((d) => move(d.experience, index, index + 1))}
+          disabled={index === count - 1}
+        >
+          ↓
+        </IconButton>
+        <IconButton
+          label="Remove role"
+          onClick={() => confirm(`Remove "${heading}"?`) && update((d) => void d.experience.splice(index, 1))}
+        >
+          ✕
+        </IconButton>
       </div>
       {open && (
         <div className="space-y-4 p-3 sm:p-4">
@@ -167,10 +269,18 @@ function ExperienceEntry({ item, index, count, update }: { item: ExperienceItem;
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Start">
-                <TextInput value={item.startDate} placeholder="2021" onChange={(v) => set((e) => void (e.startDate = v))} />
+                <TextInput
+                  value={item.startDate}
+                  placeholder="2021"
+                  onChange={(v) => set((e) => void (e.startDate = v))}
+                />
               </Field>
               <Field label="End">
-                <TextInput value={item.endDate} placeholder="Present" onChange={(v) => set((e) => void (e.endDate = v))} />
+                <TextInput
+                  value={item.endDate}
+                  placeholder="Present"
+                  onChange={(v) => set((e) => void (e.endDate = v))}
+                />
               </Field>
             </div>
           </div>
@@ -181,11 +291,24 @@ function ExperienceEntry({ item, index, count, update }: { item: ExperienceItem;
                 <li key={b.id} className="flex items-start gap-1">
                   <span className="mt-2 text-slate-400">•</span>
                   <div className="flex-1">
-                    <AutoTextarea rows={1} maxLength={500} value={b.text} onChange={(v) => set((e) => void (e.bullets[j].text = v))} />
+                    <AutoTextarea
+                      rows={1}
+                      maxLength={500}
+                      value={b.text}
+                      onChange={(v) => set((e) => void (e.bullets[j].text = v))}
+                    />
                   </div>
                   <div className="flex flex-col sm:flex-row">
-                    <IconButton label="Move bullet up" onClick={() => set((e) => move(e.bullets, j, j - 1))} disabled={j === 0}>↑</IconButton>
-                    <IconButton label="Remove bullet" onClick={() => set((e) => void e.bullets.splice(j, 1))}>✕</IconButton>
+                    <IconButton
+                      label="Move bullet up"
+                      onClick={() => set((e) => move(e.bullets, j, j - 1))}
+                      disabled={j === 0}
+                    >
+                      ↑
+                    </IconButton>
+                    <IconButton label="Remove bullet" onClick={() => set((e) => void e.bullets.splice(j, 1))}>
+                      ✕
+                    </IconButton>
                   </div>
                 </li>
               ))}
@@ -208,7 +331,15 @@ function ExperienceEntry({ item, index, count, update }: { item: ExperienceItem;
 function EducationSection({ draft, update }: { draft: CvDocument; update: Update }) {
   const add = () =>
     update((d) => {
-      d.education.push({ id: newId('edu'), institution: '', degree: '', field: '', startDate: '', endDate: '', details: '' });
+      d.education.push({
+        id: newId('edu'),
+        institution: '',
+        degree: '',
+        field: '',
+        startDate: '',
+        endDate: '',
+        details: '',
+      });
     });
   return (
     <Section
@@ -230,16 +361,43 @@ function EducationSection({ draft, update }: { draft: CvDocument; update: Update
   );
 }
 
-function EducationEntry({ item, index, count, update }: { item: EducationItem; index: number; count: number; update: Update }) {
+function EducationEntry({
+  item,
+  index,
+  count,
+  update,
+}: {
+  item: EducationItem;
+  index: number;
+  count: number;
+  update: Update;
+}) {
   const set = (fn: (e: EducationItem) => void) => update((d) => fn(d.education[index]));
   const heading = [item.degree, item.institution].filter(Boolean).join(' · ') || 'New entry';
   return (
     <div id={`entry-${item.id}`} className="scroll-mt-20 rounded-lg border border-slate-200">
       <div className="flex items-center gap-1 border-b border-slate-100 px-3 py-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{heading}</span>
-        <IconButton label="Move up" onClick={() => update((d) => move(d.education, index, index - 1))} disabled={index === 0}>↑</IconButton>
-        <IconButton label="Move down" onClick={() => update((d) => move(d.education, index, index + 1))} disabled={index === count - 1}>↓</IconButton>
-        <IconButton label="Remove" onClick={() => confirm(`Remove "${heading}"?`) && update((d) => void d.education.splice(index, 1))}>✕</IconButton>
+        <IconButton
+          label="Move up"
+          onClick={() => update((d) => move(d.education, index, index - 1))}
+          disabled={index === 0}
+        >
+          ↑
+        </IconButton>
+        <IconButton
+          label="Move down"
+          onClick={() => update((d) => move(d.education, index, index + 1))}
+          disabled={index === count - 1}
+        >
+          ↓
+        </IconButton>
+        <IconButton
+          label="Remove"
+          onClick={() => confirm(`Remove "${heading}"?`) && update((d) => void d.education.splice(index, 1))}
+        >
+          ✕
+        </IconButton>
       </div>
       <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4">
         <Field label="Institution">
@@ -260,7 +418,12 @@ function EducationEntry({ item, index, count, update }: { item: EducationItem; i
           </Field>
         </div>
         <Field label="Details" className="sm:col-span-2">
-          <AutoTextarea rows={2} maxLength={1000} value={item.details} onChange={(v) => set((e) => void (e.details = v))} />
+          <AutoTextarea
+            rows={2}
+            maxLength={1000}
+            value={item.details}
+            onChange={(v) => set((e) => void (e.details = v))}
+          />
         </Field>
       </div>
     </div>
@@ -285,7 +448,10 @@ function SkillsSection({ draft, update }: { draft: CvDocument; update: Update })
     <Section title="Skills" id="section-skills">
       <ul className="mb-3 flex flex-wrap gap-2">
         {draft.skills.map((skill, i) => (
-          <li key={`${skill}-${i}`} className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pr-1 pl-3 text-sm">
+          <li
+            key={`${skill}-${i}`}
+            className="flex items-center gap-1 rounded-full bg-slate-100 py-1 pr-1 pl-3 text-sm"
+          >
             {skill}
             <button
               type="button"

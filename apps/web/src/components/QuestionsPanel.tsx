@@ -74,7 +74,11 @@ function QuestionItem({ cv, question }: { cv: CvDetail; question: Question }) {
 
   return (
     <li className="rounded-lg border border-slate-200 p-3">
-      <button type="button" className="mb-1 text-xs font-medium text-indigo-600 hover:underline" onClick={() => scrollToField(question.fieldPath)}>
+      <button
+        type="button"
+        className="mb-1 text-xs font-medium text-indigo-600 hover:underline"
+        onClick={() => scrollToField(question.fieldPath)}
+      >
         {fieldLabel(question.fieldPath, cv.content)}
       </button>
       <p className="mb-2 text-sm">{question.question}</p>

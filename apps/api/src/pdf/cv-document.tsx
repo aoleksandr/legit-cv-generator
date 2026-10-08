@@ -20,7 +20,14 @@ const ACCENT = '#3730a3';
 const MUTED = '#64748b';
 
 const s = StyleSheet.create({
-  page: { fontFamily: 'Inter', fontSize: 9.5, lineHeight: 1.4, color: '#0f172a', paddingVertical: 36, paddingHorizontal: 42 },
+  page: {
+    fontFamily: 'Inter',
+    fontSize: 9.5,
+    lineHeight: 1.4,
+    color: '#0f172a',
+    paddingVertical: 36,
+    paddingHorizontal: 42,
+  },
   name: { fontSize: 20, fontWeight: 600, lineHeight: 1.2, marginBottom: 6 },
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', color: MUTED, fontSize: 9 },
   contactItem: { marginRight: 12 },
@@ -134,7 +141,15 @@ export function CvPdf({ cv, title }: { cv: CvDocument; title: string }) {
  * Short sections never split across pages; long ones (experience) may, but
  * their heading is never left alone at the bottom of a page.
  */
-function Section({ title, keepTogether = false, children }: { title: string; keepTogether?: boolean; children: React.ReactNode }) {
+function Section({
+  title,
+  keepTogether = false,
+  children,
+}: {
+  title: string;
+  keepTogether?: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <View style={s.section} wrap={!keepTogether}>
       <Text style={s.sectionTitle} minPresenceAhead={80}>

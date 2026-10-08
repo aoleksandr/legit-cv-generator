@@ -1,9 +1,4 @@
-import {
-  parseFieldPath,
-  type CvDocument,
-  type Fact,
-  type FactCategory,
-} from '@cv/shared';
+import { parseFieldPath, type CvDocument, type Fact, type FactCategory } from '@cv/shared';
 import { LlmError, type CvLlm } from './cv-llm.js';
 import { toCvDocument } from './generation.workflow.js';
 import { verifyCv } from './grounding.js';
@@ -49,7 +44,8 @@ export async function applyAnswer(
 
   // An answer about an entry that no longer exists (user deleted it) updates the whole section.
   const entryExists =
-    path.entryId !== null && input.content[path.section as 'experience' | 'education'].some((e) => e.id === path.entryId);
+    path.entryId !== null &&
+    input.content[path.section as 'experience' | 'education'].some((e) => e.id === path.entryId);
   const entryId = entryExists ? path.entryId : null;
 
   const answerFact: Fact = {
@@ -93,10 +89,14 @@ export async function applyAnswer(
   const draft = toDraft(input.content);
   switch (kind) {
     case 'experienceEntry':
-      draft.experience = draft.experience.map((e) => (e.id === entryId ? { ...(value as CompositionOutput['experience'][number]), id: e.id } : e));
+      draft.experience = draft.experience.map((e) =>
+        e.id === entryId ? { ...(value as CompositionOutput['experience'][number]), id: e.id } : e,
+      );
       break;
     case 'educationEntry':
-      draft.education = draft.education.map((e) => (e.id === entryId ? { ...(value as CompositionOutput['education'][number]), id: e.id } : e));
+      draft.education = draft.education.map((e) =>
+        e.id === entryId ? { ...(value as CompositionOutput['education'][number]), id: e.id } : e,
+      );
       break;
     default:
       (draft as Record<string, unknown>)[kind] = value;
@@ -151,12 +151,7 @@ function isolate(cv: CvDocument, section: string, entryId: string | null): CvDoc
   return { ...empty, education: entryId ? cv.education.filter((e) => e.id === entryId) : cv.education };
 }
 
-function merge(
-  checked: CvDocument,
-  section: string,
-  entryId: string | null,
-  original: CvDocument,
-): CvDocument {
+function merge(checked: CvDocument, section: string, entryId: string | null, original: CvDocument): CvDocument {
   // Everything outside the targeted part comes from the original, untouched.
   const out: CvDocument = structuredClone(original);
   if (section === 'contact') out.contact = checked.contact;

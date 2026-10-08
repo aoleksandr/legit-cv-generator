@@ -25,19 +25,26 @@ services:
       DATABASE_URL: postgresql://cv:cv@postgres:5432/cv
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET:-local-docker-secret-change-me}
+      AI_MODEL_MAIN: ${AI_MODEL_MAIN:-claude-sonnet-5}
+      AI_MODEL_FAST: ${AI_MODEL_FAST:-claude-haiku-4-5}
       PORT: 3000
     depends_on:
       postgres:
         condition: service_healthy
-    ports:
-      - "3000:3000"
+    # A crash or restart loses no work: jobs live in Postgres and resume (see README).
+    restart: unless-stopped
+    # Only reachable through the web container's /api proxy.
+    expose:
+      - "3000"
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    restart: unless-stopped
     ports:
       - "8080:80"
 

@@ -87,3 +87,9 @@ export const ApiErrorSchema = z.object({
   details: z.unknown().optional(),
 });
 export type ApiError = z.infer<typeof ApiErrorSchema>;
+
+/**
+ * Local development account, created by `pnpm db:seed` and offered on the login
+ * page only in Vite dev mode (the production build strips it).
+ */
+export const DEV_TEST_USER = { email: 'test@example.com', password: 'password123' } as const;

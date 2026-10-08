@@ -33,11 +33,14 @@ export function NewCvPage() {
     if (source === 'pdf') {
       if (!file) return 'Choose a PDF file.';
       if (file.size > LIMITS.pdfMaxBytes) return `The file is larger than ${LIMITS.pdfMaxBytes / 1024 / 1024} MB.`;
-      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') return 'The file must be a PDF.';
+      if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf')
+        return 'The file must be a PDF.';
     } else {
       const length = text.trim().length;
-      if (length < LIMITS.sourceTextMinChars) return `Tell us a bit more (at least ${LIMITS.sourceTextMinChars} characters).`;
-      if (length > LIMITS.sourceTextMaxChars) return `The text is too long (max ${LIMITS.sourceTextMaxChars} characters).`;
+      if (length < LIMITS.sourceTextMinChars)
+        return `Tell us a bit more (at least ${LIMITS.sourceTextMinChars} characters).`;
+      if (length > LIMITS.sourceTextMaxChars)
+        return `The text is too long (max ${LIMITS.sourceTextMaxChars} characters).`;
     }
     return null;
   };
@@ -47,7 +50,9 @@ export function NewCvPage() {
       <h1 className="text-2xl font-semibold">New CV</h1>
 
       <div>
-        <label className="label" htmlFor="role">Target role</label>
+        <label className="label" htmlFor="role">
+          Target role
+        </label>
         <input
           id="role"
           className="input"
@@ -76,7 +81,9 @@ export function NewCvPage() {
 
         {source === 'pdf' ? (
           <div>
-            <label className="label" htmlFor="file">Your current CV (PDF, max 5 MB)</label>
+            <label className="label" htmlFor="file">
+              Your current CV (PDF, max 5 MB)
+            </label>
             <input
               id="file"
               type="file"
@@ -84,11 +91,15 @@ export function NewCvPage() {
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
             />
-            <p className="mt-2 text-xs text-slate-500">The PDF needs selectable text. For scanned documents, use the text option.</p>
+            <p className="mt-2 text-xs text-slate-500">
+              The PDF needs selectable text. For scanned documents, use the text option.
+            </p>
           </div>
         ) : (
           <div>
-            <label className="label" htmlFor="text">Your background</label>
+            <label className="label" htmlFor="text">
+              Your background
+            </label>
             <textarea
               id="text"
               className="input min-h-64"
@@ -105,7 +116,8 @@ export function NewCvPage() {
       </div>
 
       <p className="text-sm text-slate-500">
-        The AI rewrites and restructures what you provide, but it won't make anything up. If something is missing or unclear, it will ask you.
+        The AI rewrites and restructures what you provide, but it won't make anything up. If something is missing or
+        unclear, it will ask you.
       </p>
 
       {formError ? <ErrorBanner>{formError}</ErrorBanner> : <ErrorBanner error={create.error} />}

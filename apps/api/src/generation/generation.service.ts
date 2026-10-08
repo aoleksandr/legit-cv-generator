@@ -71,7 +71,9 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         },
       );
       if (result.removed.length) {
-        this.logger.log(`CV ${cvId}: grounding removed ${result.removed.length} item(s):\n  ${result.removed.join('\n  ')}`);
+        this.logger.log(
+          `CV ${cvId}: grounding removed ${result.removed.length} item(s):\n  ${result.removed.join('\n  ')}`,
+        );
       }
 
       await this.prisma.$transaction([
@@ -95,9 +97,7 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
       await this.onJobError(err, job, async (message, final) => {
         await this.prisma.cv.update({
           where: { id: cvId },
-          data: final
-            ? { status: 'failed', error: message, progressStep: null }
-            : { error: `${message} Retrying…` },
+          data: final ? { status: 'failed', error: message, progressStep: null } : { error: `${message} Retrying…` },
         });
       });
     }
@@ -141,7 +141,9 @@ export class GenerationService implements OnApplicationBootstrap, OnModuleDestro
         const latest = await tx.cv.findUniqueOrThrow({ where: { id: cv.id } });
         const latestContent = readContent(latest) ?? content;
         const merged =
-          latest.version === cv.version ? result.content : splicePart(latestContent, result.content, question.fieldPath);
+          latest.version === cv.version
+            ? result.content
+            : splicePart(latestContent, result.content, question.fieldPath);
         await tx.cv.update({
           where: { id: cv.id },
           data: { content: merged, facts: result.facts, version: { increment: 1 } },

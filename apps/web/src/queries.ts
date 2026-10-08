@@ -39,7 +39,8 @@ export function useCvList() {
     queryKey: keys.cvs,
     queryFn: api.listCvs,
     // Keep statuses fresh while anything is still generating.
-    refetchInterval: (q) => (q.state.data?.some((c) => c.status === 'queued' || c.status === 'processing') ? 3000 : false),
+    refetchInterval: (q) =>
+      q.state.data?.some((c) => c.status === 'queued' || c.status === 'processing') ? 3000 : false,
   });
 }
 
@@ -74,7 +75,9 @@ export function useRenameCv(id: string) {
     mutationFn: (title: string) => api.renameCv(id, title),
     onMutate: async (title) => {
       const rollbackCv = await optimistic<CvDetail>(qc, keys.cv(id), (cv) => ({ ...cv, title }));
-      const rollbackList = await optimistic<CvSummary[]>(qc, keys.cvs, (list) => list.map((c) => (c.id === id ? { ...c, title } : c)));
+      const rollbackList = await optimistic<CvSummary[]>(qc, keys.cvs, (list) =>
+        list.map((c) => (c.id === id ? { ...c, title } : c)),
+      );
       return () => {
         rollbackCv();
         rollbackList();
@@ -125,7 +128,8 @@ export function useSaveContent(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationKey: ['save-content', id],
-    mutationFn: ({ version, content }: { version: number; content: CvDocument }) => api.updateContent(id, version, content),
+    mutationFn: ({ version, content }: { version: number; content: CvDocument }) =>
+      api.updateContent(id, version, content),
     onMutate: ({ content }) => optimistic<CvDetail>(qc, keys.cv(id), (cv) => ({ ...cv, content })),
     onError: async (err, _v, rollback) => {
       rollback?.();
@@ -154,9 +158,12 @@ function patchQuestion(cv: CvDetail, questionId: string, patch: Partial<Question
 export function useAnswerQuestion(cvId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ questionId, answer }: { questionId: string; answer: string }) => api.answer(cvId, questionId, answer),
+    mutationFn: ({ questionId, answer }: { questionId: string; answer: string }) =>
+      api.answer(cvId, questionId, answer),
     onMutate: ({ questionId, answer }) =>
-      optimistic<CvDetail>(qc, keys.cv(cvId), (cv) => patchQuestion(cv, questionId, { answer, applying: true, error: null })),
+      optimistic<CvDetail>(qc, keys.cv(cvId), (cv) =>
+        patchQuestion(cv, questionId, { answer, applying: true, error: null }),
+      ),
     onError: (err, _v, rollback) => {
       rollback?.();
       toastError(err, 'Could not send your answer');
@@ -169,7 +176,8 @@ export function useDismissQuestion(cvId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (questionId: string) => api.dismiss(cvId, questionId),
-    onMutate: (questionId) => optimistic<CvDetail>(qc, keys.cv(cvId), (cv) => patchQuestion(cv, questionId, { status: 'dismissed' })),
+    onMutate: (questionId) =>
+      optimistic<CvDetail>(qc, keys.cv(cvId), (cv) => patchQuestion(cv, questionId, { status: 'dismissed' })),
     onError: (err, _v, rollback) => {
       rollback?.();
       toastError(err, 'Could not skip the question');

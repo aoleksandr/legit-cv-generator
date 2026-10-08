@@ -19,7 +19,9 @@ export function CvPage() {
     const notFound = error instanceof ApiError && (error.status === 404 || error.status === 400);
     return (
       <div className="mx-auto max-w-xl space-y-4 text-center">
-        <ErrorBanner>{notFound ? 'This CV does not exist or you do not have access to it.' : (error as Error).message}</ErrorBanner>
+        <ErrorBanner>
+          {notFound ? 'This CV does not exist or you do not have access to it.' : (error as Error).message}
+        </ErrorBanner>
         <Link to="/" className="btn-secondary">
           Back to your CVs
         </Link>
@@ -75,7 +77,13 @@ function CvHeader({ cv }: { cv: CvDetail }) {
               submitRename();
             }}
           >
-            <input className="input" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            <input
+              className="input"
+              value={title}
+              maxLength={120}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+            />
             <button className="btn-primary">Save</button>
             <button type="button" className="btn-ghost" onClick={() => setEditing(false)}>
               Cancel
@@ -99,10 +107,7 @@ function CvHeader({ cv }: { cv: CvDetail }) {
           Target role: {cv.targetRole} <StatusBadge status={cv.status} />
         </p>
       </div>
-      <button
-        className="btn-ghost self-start text-red-600 hover:bg-red-50 hover:text-red-700"
-        onClick={deleteCv}
-      >
+      <button className="btn-ghost self-start text-red-600 hover:bg-red-50 hover:text-red-700" onClick={deleteCv}>
         Delete
       </button>
     </div>

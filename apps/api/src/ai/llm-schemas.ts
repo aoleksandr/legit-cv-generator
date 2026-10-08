@@ -24,7 +24,9 @@ export const ExtractionOutputSchema = z.object({
     z.object({
       fieldPath: z
         .string()
-        .describe('"contact" | "summary" | "skills" | "experience" | "education" | "experience:<entry>" | "education:<entry>"'),
+        .describe(
+          '"contact" | "summary" | "skills" | "experience" | "education" | "experience:<entry>" | "education:<entry>"',
+        ),
       question: z.string().describe('A short, specific question to the candidate.'),
     }),
   ),

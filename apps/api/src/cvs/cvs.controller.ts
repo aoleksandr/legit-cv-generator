@@ -65,7 +65,11 @@ export class CvsController {
     @UserId() userId: string,
     @Body(new ZodPipe(CreateCvFromTextSchema)) body: CreateCvFromText,
   ): Promise<CvDetail> {
-    const cv = await this.cvs.create(userId, { targetRole: body.targetRole, sourceType: 'text', sourceText: body.text });
+    const cv = await this.cvs.create(userId, {
+      targetRole: body.targetRole,
+      sourceType: 'text',
+      sourceText: body.text,
+    });
     return toDetail(cv, []);
   }
 
@@ -98,11 +102,7 @@ export class CvsController {
 
   /** A4 PDF with selectable text, rendered from the saved content. */
   @Get(':id/pdf')
-  async downloadPdf(
-    @UserId() userId: string,
-    @Param('id', uuid) id: string,
-    @Res() res: Response,
-  ): Promise<void> {
+  async downloadPdf(@UserId() userId: string, @Param('id', uuid) id: string, @Res() res: Response): Promise<void> {
     const cv = await this.cvs.getOwned(userId, id);
     const content = cv.status === 'ready' ? readContent(cv) : null;
     if (!content) throw new ConflictException('The CV is not ready yet');
@@ -112,7 +112,9 @@ export class CvsController {
       .set({
         'Content-Type': 'application/pdf',
         'Content-Length': String(buffer.length),
-        'Content-Disposition': contentDisposition(content.contact.fullName ? `${content.contact.fullName} - ${cv.title}` : cv.title),
+        'Content-Disposition': contentDisposition(
+          content.contact.fullName ? `${content.contact.fullName} - ${cv.title}` : cv.title,
+        ),
         'Cache-Control': 'private, no-store',
       })
       .end(buffer);

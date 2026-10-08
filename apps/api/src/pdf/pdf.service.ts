@@ -12,7 +12,17 @@ export class PdfService {
 
 /** "Jane Doe – Backend.pdf" for the header, with an ASCII fallback for old clients. */
 export function contentDisposition(baseName: string): string {
-  const name = (baseName.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim() || 'cv').slice(0, 100);
-  const ascii = name.normalize('NFKD').replace(/[^\x20-\x7e]/g, '').replace(/\s+/g, ' ').trim() || 'cv';
+  const name = (
+    baseName
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || 'cv'
+  ).slice(0, 100);
+  const ascii =
+    name
+      .normalize('NFKD')
+      .replace(/[^\x20-\x7e]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'cv';
   return `attachment; filename="${ascii}.pdf"; filename*=UTF-8''${encodeURIComponent(`${name}.pdf`)}`;
 }

@@ -3,11 +3,7 @@ import { Agent } from '@mastra/core/agent';
 import type { Fact } from '@cv/shared';
 import type { z } from 'zod';
 import { config } from '../config.js';
-import {
-  APPLY_ANSWER_INSTRUCTIONS,
-  COMPOSER_INSTRUCTIONS,
-  EXTRACTOR_INSTRUCTIONS,
-} from './prompts.js';
+import { APPLY_ANSWER_INSTRUCTIONS, COMPOSER_INSTRUCTIONS, EXTRACTOR_INSTRUCTIONS } from './prompts.js';
 import {
   CompositionOutputSchema,
   ExtractionOutputSchema,
@@ -66,9 +62,24 @@ export class MastraCvLlm implements CvLlm {
 
   constructor() {
     const main = `anthropic/${config.models.main}`;
-    this.extractor = new Agent({ id: 'fact-extractor', name: 'Fact extractor', instructions: EXTRACTOR_INSTRUCTIONS, model: main });
-    this.composer = new Agent({ id: 'cv-composer', name: 'CV composer', instructions: COMPOSER_INSTRUCTIONS, model: main });
-    this.answerer = new Agent({ id: 'answer-applier', name: 'Answer applier', instructions: APPLY_ANSWER_INSTRUCTIONS, model: main });
+    this.extractor = new Agent({
+      id: 'fact-extractor',
+      name: 'Fact extractor',
+      instructions: EXTRACTOR_INSTRUCTIONS,
+      model: main,
+    });
+    this.composer = new Agent({
+      id: 'cv-composer',
+      name: 'CV composer',
+      instructions: COMPOSER_INSTRUCTIONS,
+      model: main,
+    });
+    this.answerer = new Agent({
+      id: 'answer-applier',
+      name: 'Answer applier',
+      instructions: APPLY_ANSWER_INSTRUCTIONS,
+      model: main,
+    });
   }
 
   extractFacts({ sourceText, targetRole }: { sourceText: string; targetRole: string }) {
@@ -83,7 +94,14 @@ export class MastraCvLlm implements CvLlm {
   composeCv({ facts, targetRole }: { facts: Fact[]; targetRole: string }) {
     const prompt = [
       `Target role: ${JSON.stringify(targetRole)}`,
-      asData('facts', JSON.stringify(facts.map(({ id, category, entry, text }) => ({ id, category, entry, text })), null, 1)),
+      asData(
+        'facts',
+        JSON.stringify(
+          facts.map(({ id, category, entry, text }) => ({ id, category, entry, text })),
+          null,
+          1,
+        ),
+      ),
       'Write the CV.',
     ].join('\n\n');
     return this.generate(this.composer, prompt, CompositionOutputSchema);
@@ -94,7 +112,14 @@ export class MastraCvLlm implements CvLlm {
       `Target role: ${JSON.stringify(input.targetRole)}`,
       `Part of the CV to update: ${input.kind}`,
       asData('current', JSON.stringify(input.current, null, 1)),
-      asData('facts', JSON.stringify(input.facts.map(({ id, category, entry, text }) => ({ id, category, entry, text })), null, 1)),
+      asData(
+        'facts',
+        JSON.stringify(
+          input.facts.map(({ id, category, entry, text }) => ({ id, category, entry, text })),
+          null,
+          1,
+        ),
+      ),
       `Question asked: ${JSON.stringify(input.question)}`,
       `The answer below is stored as fact id "${input.answerFactId}".`,
       asData('answer', input.answer),
@@ -129,7 +154,9 @@ export class MastraCvLlm implements CvLlm {
         const parsed = schema.safeParse(res.object);
         if (parsed.success) return parsed.data;
         lastError = parsed.error;
-        this.logger.warn(`${agent.id}: invalid structured output (attempt ${attempt}): ${parsed.error.message.slice(0, 500)}`);
+        this.logger.warn(
+          `${agent.id}: invalid structured output (attempt ${attempt}): ${parsed.error.message.slice(0, 500)}`,
+        );
         messages = `${prompt}\n\nYour previous response did not match the required schema: ${parsed.error.message.slice(0, 1000)}\nReturn a valid response.`;
       } catch (err) {
         if (isSchemaFailure(err) && attempt === 1) {

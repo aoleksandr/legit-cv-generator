@@ -1,12 +1,4 @@
-import type {
-  Credentials,
-  CreateCvFromText,
-  CvDetail,
-  CvDocument,
-  CvSummary,
-  Question,
-  User,
-} from '@cv/shared';
+import type { Credentials, CreateCvFromText, CvDetail, CvDocument, CvSummary, Question, User } from '@cv/shared';
 
 export class ApiError extends Error {
   constructor(

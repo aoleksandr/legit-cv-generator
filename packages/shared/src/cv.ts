@@ -65,13 +65,7 @@ export const emptyCvDocument = (): CvDocument => CvDocumentSchema.parse({ contac
  * Every fact must be traceable: `sourceQuote` is a verbatim excerpt of the
  * source text (or of the user's answer when origin is "user_answer").
  */
-export const FactCategorySchema = z.enum([
-  'contact',
-  'experience',
-  'education',
-  'skill',
-  'other',
-]);
+export const FactCategorySchema = z.enum(['contact', 'experience', 'education', 'skill', 'other']);
 export type FactCategory = z.infer<typeof FactCategorySchema>;
 
 export const FactSchema = z.object({

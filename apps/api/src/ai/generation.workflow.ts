@@ -176,7 +176,10 @@ export function toCvDocument(draft: CompositionOutput): CvDocument {
       email: clamp(draft.contact?.email, 200),
       phone: clamp(draft.contact?.phone, 200),
       location: clamp(draft.contact?.location, 200),
-      links: (draft.contact?.links ?? []).map((l) => clamp(l, 300)).filter(Boolean).slice(0, 10),
+      links: (draft.contact?.links ?? [])
+        .map((l) => clamp(l, 300))
+        .filter(Boolean)
+        .slice(0, 10),
     },
     summary: clamp(draft.summary, 2000),
     experience: (draft.experience ?? []).slice(0, 50).map((e, i) => {
@@ -207,7 +210,10 @@ export function toCvDocument(draft: CompositionOutput): CvDocument {
       endDate: clamp(e.endDate, 200),
       details: clamp(e.details, 1000),
     })),
-    skills: (draft.skills ?? []).map((s) => clamp(s, 100)).filter(Boolean).slice(0, 100),
+    skills: (draft.skills ?? [])
+      .map((s) => clamp(s, 100))
+      .filter(Boolean)
+      .slice(0, 100),
   };
 
   const parsed = CvDocumentSchema.safeParse(doc);

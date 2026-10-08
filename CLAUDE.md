@@ -91,6 +91,7 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
 5. **Persist:** saves `content`, and turns the gaps into `cv_questions` with a `field_path`.
 
 **Answering a question:**
+
 - The answer is added to the fact ledger as a user-provided fact.
 - A scoped agent rewrites **only** the section at `field_path`.
 - The result goes through the same Zod validation and deterministic verification, then is saved with a version bump.
@@ -128,6 +129,7 @@ Frontend tests are optional and low priority.
 ## Conventions
 
 - Keep commits small and readable, roughly one per module or feature.
+- Code is formatted with Prettier (`.prettierrc.json`). Run `pnpm format` before committing; `pnpm format:check` verifies.
 - Tests must never call the real Anthropic API. Mock it at the Mastra agent/model boundary.
 - Possible cuts if time runs short, in order:
   1. the LLM critic pass (keep the deterministic checks)

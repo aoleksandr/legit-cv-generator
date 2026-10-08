@@ -190,12 +190,7 @@ export function verifyCv(input: CvDocument, facts: Fact[]): CvCheckResult {
   return { cv, issues: dedupeIssues(issues), removed };
 }
 
-function checkExperience(
-  item: ExperienceItem,
-  corpus: Corpus,
-  issues: Issue[],
-  removed: string[],
-): ExperienceItem {
+function checkExperience(item: ExperienceItem, corpus: Corpus, issues: Issue[], removed: string[]): ExperienceItem {
   const path = `experience:${item.id}`;
   const label = item.company || item.title || 'this role';
 
@@ -229,17 +224,16 @@ function checkExperience(
   });
 
   if (!item.title) issues.push({ fieldPath: path, question: `What was your job title at ${label}?` });
-  if (!item.company) issues.push({ fieldPath: path, question: `Which company or organisation was the "${item.title || 'this'}" role at?` });
+  if (!item.company)
+    issues.push({
+      fieldPath: path,
+      question: `Which company or organisation was the "${item.title || 'this'}" role at?`,
+    });
   if (!item.startDate) issues.push({ fieldPath: path, question: `When did you start and finish at ${label}?` });
   return item;
 }
 
-function checkEducation(
-  item: EducationItem,
-  corpus: Corpus,
-  issues: Issue[],
-  removed: string[],
-): EducationItem {
+function checkEducation(item: EducationItem, corpus: Corpus, issues: Issue[], removed: string[]): EducationItem {
   const path = `education:${item.id}`;
   for (const key of ['institution', 'degree', 'field'] as const) {
     if (item[key] && !corpus.hasWords(item[key])) {

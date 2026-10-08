@@ -1,11 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpException,
-  HttpStatus,
-  Logger,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { Response } from 'express';
 
 /** Uniform `{ statusCode, message, details? }` error bodies; never leaks internals on 500. */
@@ -23,7 +16,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         typeof body === 'string'
           ? body
           : Array.isArray((body as { message?: unknown }).message)
-            ? ((body as { message: string[] }).message).join(', ')
+            ? (body as { message: string[] }).message.join(', ')
             : String((body as { message?: unknown }).message ?? exception.message);
       const details = typeof body === 'object' ? (body as { details?: unknown }).details : undefined;
       res.status(status).json({ statusCode: status, message, ...(details ? { details } : {}) });
