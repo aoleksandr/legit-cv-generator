@@ -29,31 +29,37 @@ export function QuestionsPanel({ cv }: { cv: CvDetail }) {
   const answered = cv.questions.filter((q) => q.status === 'answered');
 
   return (
-    <aside className="card p-4 sm:p-5">
-      <h2 className="font-semibold">Questions from the AI</h2>
-      <p className="mb-4 text-sm text-slate-500">
-        {open.length > 0
-          ? 'Some details were missing or unclear. Your answers update the relevant part of the CV.'
-          : 'No open questions. You can still edit anything by hand.'}
-      </p>
-      <ul className="space-y-3">
-        {open.map((q) => (
-          <QuestionItem key={q.id} cv={cv} question={q} />
-        ))}
-      </ul>
-      {answered.length > 0 && (
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer text-slate-500">Answered ({answered.length})</summary>
-          <ul className="mt-2 space-y-2">
-            {answered.map((q) => (
-              <li key={q.id} className="rounded-lg bg-slate-50 p-2">
-                <p className="text-slate-600">{q.question}</p>
-                <p className="mt-1 text-slate-900">{q.answer}</p>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+    // When the page caps its height (wide screens), the heading stays put and only the questions scroll.
+    <aside className="card flex min-h-0 flex-col p-4 sm:p-5">
+      <div className="shrink-0">
+        <h2 className="font-semibold">Questions from the AI</h2>
+        <p className="mb-4 text-sm text-slate-500">
+          {open.length > 0
+            ? 'Some details were missing or unclear. Your answers update the relevant part of the CV.'
+            : 'No open questions. You can still edit anything by hand.'}
+        </p>
+      </div>
+      {/* Padding keeps focus rings from being clipped by the scroll container. */}
+      <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
+        <ul className="space-y-3">
+          {open.map((q) => (
+            <QuestionItem key={q.id} cv={cv} question={q} />
+          ))}
+        </ul>
+        {answered.length > 0 && (
+          <details className="mt-4 text-sm">
+            <summary className="cursor-pointer text-slate-500">Answered ({answered.length})</summary>
+            <ul className="mt-2 space-y-2">
+              {answered.map((q) => (
+                <li key={q.id} className="rounded-lg bg-slate-50 p-2">
+                  <p className="text-slate-600">{q.question}</p>
+                  <p className="mt-1 text-slate-900">{q.answer}</p>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
     </aside>
   );
 }

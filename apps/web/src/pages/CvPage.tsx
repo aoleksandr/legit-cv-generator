@@ -136,7 +136,9 @@ function ReadyView({ cv }: { cv: CvDetail }) {
   const { draft, update, saving } = useCvDraft(cv);
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+    // grid-cols-1 (minmax(0, 1fr)) on phones: an implicit column sizes to its content's min-content width,
+    // so one long unwrappable line (e.g. an entry heading) would make the whole page scroll sideways.
+    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="space-y-4">
         <div className="sticky top-14 z-[5] -mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/95 px-4 py-2 backdrop-blur lg:mx-0 lg:rounded-lg lg:border">
           <span className="text-sm text-slate-500" aria-live="polite">
@@ -154,7 +156,10 @@ function ReadyView({ cv }: { cv: CvDetail }) {
         </div>
         <CvEditor draft={draft} update={update} />
       </div>
-      <div className="order-first lg:sticky lg:top-20 lg:order-last">
+      {/* On wide screens the panel sticks beside the editor, capped so its questions scroll inside
+          it. The cap must fit where it starts before the page scrolls (below the app header and
+          the CV title, about 12rem down), or its end sits off-screen until the page scrolls. */}
+      <div className="order-first lg:sticky lg:top-20 lg:order-last lg:flex lg:max-h-[calc(100dvh-14rem)] lg:flex-col">
         <QuestionsPanel cv={cv} />
       </div>
     </div>
