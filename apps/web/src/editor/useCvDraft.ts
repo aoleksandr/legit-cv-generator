@@ -13,7 +13,8 @@ const AUTOSAVE_DELAY_MS = 800;
  * serialised so each one carries the version the previous one produced. If a
  * save fails, the mutation rolls the cache back and the draft follows it.
  * Changes from elsewhere (an answered question, another device) replace the
- * draft only when the user has nothing unsaved.
+ * draft only when the user has nothing unsaved. Leaving the page saves pending
+ * edits right away instead of dropping them.
  */
 export function useCvDraft(cv: CvDetail) {
   const qc = useQueryClient();
@@ -40,32 +41,37 @@ export function useCvDraft(cv: CvDetail) {
     }
   }, [cv.version, cv.content, replaceDraft]);
 
+  // mutateAsync, not mutate(..., callbacks): its promise settles even after the editor unmounts,
+  // so a save chained behind the one in flight still runs when the user has left the page.
+  const { mutateAsync } = save;
   const commit = useCallback(() => {
     if (inFlight.current) return; // the running save picks up the latest draft when it settles
     const version = qc.getQueryData<CvDetail>(keys.cv(cv.id))?.version ?? ownVersion.current;
     pending.current = false;
     inFlight.current = true;
-    save.mutate(
-      { version, content: forSaving(draftRef.current) },
-      {
-        onSuccess: (updated) => {
+    mutateAsync({ version, content: forSaving(draftRef.current) })
+      .then(
+        (updated) => {
           ownVersion.current = updated.version;
         },
-        onError: () => {
-          // The mutation restored the last accepted content; drop local edits made on top of the failed one.
+        () => {
+          // The mutation restored the last accepted content (and toasted); drop local edits made on top of the failed one.
           pending.current = false;
           clearTimeout(timer.current);
           const restored = qc.getQueryData<CvDetail>(keys.cv(cv.id))?.content;
           if (restored) replaceDraft(restored);
         },
-        onSettled: () => {
-          inFlight.current = false;
-          if (pending.current) commit();
-          else setHasPendingEdits(false);
-        },
-      },
-    );
-  }, [qc, cv.id, save, replaceDraft]);
+      )
+      .finally(() => {
+        inFlight.current = false;
+        if (pending.current) commit();
+        else setHasPendingEdits(false);
+      });
+  }, [qc, cv.id, mutateAsync, replaceDraft]);
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  }, [commit]);
 
   const update = useCallback(
     (fn: (d: CvDocument) => void) => {
@@ -80,7 +86,7 @@ export function useCvDraft(cv: CvDetail) {
     [commit, replaceDraft],
   );
 
-  // Warn before leaving with unsaved edits.
+  // Closing the tab can't wait for a save, so warn. Navigating within the app saves immediately.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (pending.current || inFlight.current) e.preventDefault();
@@ -89,6 +95,7 @@ export function useCvDraft(cv: CvDetail) {
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload);
       clearTimeout(timer.current);
+      if (pending.current) commitRef.current();
     };
   }, []);
 

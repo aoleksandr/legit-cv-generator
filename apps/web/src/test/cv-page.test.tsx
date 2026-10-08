@@ -1,5 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { content, cv, question, USER } from './fixtures';
 import { renderApp } from './render';
 import { db, seedCv, sent, server } from './server';
@@ -57,6 +57,40 @@ describe('editing', () => {
     expect(saves).toHaveLength(1);
     expect(saves[0].body).toMatchObject({ version: 1, content: { summary: 'Payments engineer.' } });
     expect(db.cvs.get('cv1')!.version).toBe(2);
+  });
+
+  it('saves an edit made just before leaving the page', async () => {
+    seedCv(cv());
+    const { user } = renderApp('/cvs/cv1');
+    await user.type(await screen.findByDisplayValue('Backend engineer focused on payments APIs.'), ' Leaving now.');
+
+    // Within the autosave delay, go back to the list.
+    await user.click(screen.getByRole('link', { name: '← All CVs' }));
+
+    expect(await screen.findByRole('heading', { name: 'Your CVs' })).toBeInTheDocument();
+    await waitFor(() => expect(sent('PUT /api/cvs/cv1/content')).toHaveLength(1));
+    await waitFor(() =>
+      expect(db.cvs.get('cv1')!.content!.summary).toBe('Backend engineer focused on payments APIs. Leaving now.'),
+    );
+  });
+
+  it('saves edits made while a save was in flight, after leaving the page', async () => {
+    seedCv(cv());
+    // Slow saves; returning nothing falls through to the regular handler.
+    server.use(http.put('/api/cvs/:id/content', () => delay(300)));
+    const { user } = renderApp('/cvs/cv1');
+    await user.type(await screen.findByDisplayValue('Backend engineer focused on payments APIs.'), ' One.');
+    await waitFor(() => expect(sent('PUT /api/cvs/cv1/content')).toHaveLength(1));
+
+    await user.type(summaryBox(), ' Two.');
+    await user.click(screen.getByRole('link', { name: '← All CVs' }));
+
+    // The second save waits for the first, then carries the version it produced.
+    await waitFor(() => expect(sent('PUT /api/cvs/cv1/content')).toHaveLength(2), { timeout: 3000 });
+    expect(sent('PUT /api/cvs/cv1/content')[1].body).toMatchObject({ version: 2 });
+    await waitFor(() =>
+      expect(db.cvs.get('cv1')!.content!.summary).toBe('Backend engineer focused on payments APIs. One. Two.'),
+    );
   });
 
   it('on a conflict, drops the edit, loads the latest version and explains why', async () => {
