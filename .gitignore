@@ -9,3 +9,4 @@ coverage/
 .DS_Store
 apps/api/src/generated/
 *.tsbuildinfo
+apps/api/eval/out/

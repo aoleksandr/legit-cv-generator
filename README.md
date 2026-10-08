@@ -43,6 +43,35 @@ The e2e suite drops and recreates its own `cv_test` database (override with `TES
 | `test/cvs.e2e.spec.ts`               | **Ownership isolation** (every route returns 404 for another user's CV), **409 on a stale version**, Zod validation of edits, PDF download (A4), upload validation (magic bytes, size, no text layer, corrupt files) |
 | `test/jobs.e2e.spec.ts`              | Job failure and retry: retryable vs final vs non-retryable errors, the user-facing messages, the Retry endpoint, no duplicate jobs, applying answers concurrently with manual edits                                  |
 
+### Eval against the real model
+
+```bash
+pnpm eval                       # opt-in; uses ANTHROPIC_API_KEY from .env, about 2 Sonnet calls per case, ~40 s
+```
+
+The unit and e2e tests prove that the checks work on output we control. The eval checks what the real model does with real input. It runs the full pipeline on six source texts, each aimed at one failure mode:
+
+- prompt injection inside the CV;
+- vague input;
+- several jobs with metrics and dates;
+- ordering by relevance rather than recency;
+- copying contact details exactly;
+- almost no information.
+
+It has two kinds of checks:
+
+- **Hard checks** fail the run: no number or employer that isn't in the source, no injected content, plus each case's own expectations. Examples: the 12 % stays with Shoply, the data job comes first for a Data Engineer role, vague input yields questions and no employer.
+- **Measurements** are only reported: wording that inflates a claim, how much the deterministic checks had to remove, and the number of questions.
+
+Each run writes a summary table (`report.md`) and each case's full output to `apps/api/eval/out/`, which is gitignored because results vary from run to run.
+
+What it showed:
+
+- The hard guarantees held on every run.
+- Output varies between runs. One run turned vague input into a role with 4 cautious bullets, the next into no roles and 7 questions. Both are acceptable, but one run is a sample.
+- Filler sometimes gets through, despite the prompt: "track record" in one run, "focused on improving product experiences through iterative testing" in another. This is the remaining gap, and what the cut critic pass would address.
+- The checks are occasionally over-strict: the skill "Usability Testing" was removed because the source says "usability tests".
+
 ## Architecture
 
 ```
@@ -130,7 +159,8 @@ Following "cut features, not reliability":
 
 ## With more time
 
-- Add the Haiku critic: a cheap pass that flags unsupported qualitative claims in bullets and the summary, and turns them into questions instead of deleting them.
+- Add the Haiku critic: a cheap pass that flags unsupported qualitative claims in bullets and the summary, and turns them into questions instead of deleting them. The eval already shows where it's needed (filler in the summary) and would measure it before and after.
+- Grow the eval: more cases, several runs per case to measure variance, and an LLM-judged filler score instead of a word list.
 - Stream progress over SSE instead of polling, and show per-bullet "source" tooltips (the fact ids are already stored).
 - An eval set of real CVs, with known injected hallucinations, to measure how often the checks catch them.
 - Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add Playwright tests for the editor.

@@ -14,7 +14,8 @@
     "typecheck": "pnpm --filter @cv/shared build && pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "db:seed": "pnpm --filter @cv/shared build && pnpm --filter @cv/api db:seed"
+    "db:seed": "pnpm --filter @cv/shared build && pnpm --filter @cv/api db:seed",
+    "eval": "pnpm --filter @cv/shared build && pnpm --filter @cv/api eval"
   },
   "devDependencies": {
     "prettier": "^3.9.9"

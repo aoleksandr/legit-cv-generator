@@ -15,7 +15,8 @@
     "db:generate": "prisma generate",
     "test:unit": "vitest run --project unit",
     "test:e2e": "prisma generate && vitest run --project e2e",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "eval": "prisma generate && vitest run --config vitest.eval.config.ts"
   },
   "dependencies": {
     "@cv/shared": "workspace:*",
