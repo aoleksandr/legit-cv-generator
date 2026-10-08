@@ -25,6 +25,7 @@ const s = StyleSheet.create({
   contactRow: { flexDirection: 'row', flexWrap: 'wrap', color: MUTED, fontSize: 9 },
   contactItem: { marginRight: 12 },
   link: { color: ACCENT, textDecoration: 'none' },
+  linkLine: { fontSize: 9, color: MUTED, marginTop: 1 },
   section: { marginTop: 14 },
   sectionTitle: {
     fontSize: 10,
@@ -48,7 +49,8 @@ const s = StyleSheet.create({
   skills: { flexDirection: 'row', flexWrap: 'wrap' },
 });
 
-const dates = (start: string, end: string) => [start, end].filter(Boolean).join(' – ');
+const dates = (start: string, end: string) =>
+  start && start === end ? start : [start, end].filter(Boolean).join(' – ');
 const join = (...parts: string[]) => parts.filter(Boolean).join(', ');
 
 /** Only real web/mail links become clickable; anything else (e.g. "javascript:") stays plain text. */
@@ -72,25 +74,28 @@ export function CvPdf({ cv, title }: { cv: CvDocument; title: string }) {
       <Page size="A4" style={s.page}>
         <View>
           {contact.fullName && <Text style={s.name}>{contact.fullName}</Text>}
-          <View style={s.contactRow}>
-            {contactItems.map((item) => (
-              <Text key={item} style={s.contactItem}>
-                {item}
-              </Text>
-            ))}
-            {contact.links.map((link) => {
-              const href = safeHref(link);
-              return href ? (
-                <Link key={link} src={href} style={[s.contactItem, s.link]}>
-                  {link}
-                </Link>
-              ) : (
-                <Text key={link} style={s.contactItem}>
-                  {link}
+          {contactItems.length > 0 && (
+            <View style={s.contactRow}>
+              {contactItems.map((item) => (
+                <Text key={item} style={s.contactItem}>
+                  {item}
                 </Text>
-              );
-            })}
-          </View>
+              ))}
+            </View>
+          )}
+          {/* One link per line: URLs are long and unreadable when squeezed into the contact row. */}
+          {contact.links.map((link) => {
+            const href = safeHref(link);
+            return href ? (
+              <Link key={link} src={href} style={[s.linkLine, s.link]}>
+                {link}
+              </Link>
+            ) : (
+              <Text key={link} style={s.linkLine}>
+                {link}
+              </Text>
+            );
+          })}
         </View>
 
         {cv.summary && (

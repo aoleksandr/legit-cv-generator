@@ -97,12 +97,16 @@ class Corpus {
     return !n || this.text.includes(` ${n} `);
   }
 
-  /** Every word of the value appears somewhere in the facts (allows reordering, not invention). */
+  /**
+   * Every word of the value appears in the facts (allows reordering, not invention).
+   * A word of 4+ characters may also be the start of a fact word, so "Intern"
+   * matches "Internship" and "Engineer" matches "Engineering".
+   */
   hasWords(value: string): boolean {
     return normalize(value)
       .split(' ')
       .filter(Boolean)
-      .every((w) => this.text.includes(` ${w} `));
+      .every((w) => this.text.includes(` ${w} `) || (w.length >= 4 && this.text.includes(` ${w}`)));
   }
 
   hasDigits(value: string): boolean {
