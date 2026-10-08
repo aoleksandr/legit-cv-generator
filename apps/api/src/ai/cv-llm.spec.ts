@@ -1,12 +1,15 @@
+import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 import { composition, FACTS, TARGET_ROLE } from '../testing/fixtures.js';
 
 // Replace Mastra's Agent: tests control what "the model" returns and never reach Anthropic.
 const generate = vi.fn();
+const agentConfigs: { id: string; errorProcessors?: StreamErrorRetryProcessor[] }[] = [];
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {
     readonly id: string;
     constructor(opts: { id: string }) {
       this.id = opts.id;
+      agentConfigs.push(opts);
     }
     generate = generate;
   },
@@ -59,6 +62,71 @@ describe('MastraCvLlm', () => {
     await expect(compose()).rejects.toMatchObject({
       retryable: true,
       message: 'The AI service is temporarily unavailable.',
+    });
+  });
+
+  it('replaces Mastra’s stream retry so maxRetries is the only provider retry layer', async () => {
+    new MastraCvLlm();
+    const overloaded = Object.assign(new Error('Overloaded'), { isRetryable: true, statusCode: 529 });
+    const args = { error: overloaded, retryCount: 0 } as never;
+
+    for (const agent of agentConfigs) {
+      const retry = agent.errorProcessors?.find((p) => p.id === 'stream-error-retry-processor');
+      expect(retry, agent.id).toBeInstanceOf(StreamErrorRetryProcessor);
+      await expect(retry!.processAPIError(args), agent.id).resolves.toBeUndefined();
+    }
+    // Control: the same error is retried when the processor allows it, so the check above is meaningful.
+    await expect(new StreamErrorRetryProcessor({ maxRetries: 1, delayMs: 0 }).processAPIError(args)).resolves.toEqual({
+      retry: true,
+    });
+  });
+
+  describe('abort signal', () => {
+    it('passes the signal to the model call', async () => {
+      const ac = new AbortController();
+      generate.mockResolvedValueOnce({ object: composition() });
+      await new MastraCvLlm().composeCv({ facts: FACTS, targetRole: TARGET_ROLE }, ac.signal);
+      expect(generate.mock.calls[0][1].abortSignal).toBe(ac.signal);
+    });
+
+    it('stops without a repair attempt when aborted mid-call', async () => {
+      const ac = new AbortController();
+      // Mastra resolves an aborted run instead of rejecting it.
+      generate.mockImplementationOnce(async () => {
+        ac.abort(new Error('job expired'));
+        return { finishReason: 'aborted', object: undefined };
+      });
+
+      const err = await new MastraCvLlm()
+        .composeCv({ facts: FACTS, targetRole: TARGET_ROLE }, ac.signal)
+        .catch((e) => e);
+
+      expect(err).toMatchObject({ message: 'The AI request was cancelled.' });
+      expect(generate).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports an abort during the repair attempt as cancelled, not as invalid output', async () => {
+      const ac = new AbortController();
+      generate.mockResolvedValueOnce({ object: { summary: 42 } }).mockImplementationOnce(async () => {
+        ac.abort(new Error('job expired'));
+        return { finishReason: 'aborted', object: undefined };
+      });
+
+      const err = await new MastraCvLlm()
+        .composeCv({ facts: FACTS, targetRole: TARGET_ROLE }, ac.signal)
+        .catch((e) => e);
+
+      expect(err).toMatchObject({ message: 'The AI request was cancelled.' });
+      expect(generate).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not call the model once already aborted', async () => {
+      const ac = new AbortController();
+      ac.abort();
+      await expect(new MastraCvLlm().composeCv({ facts: FACTS, targetRole: TARGET_ROLE }, ac.signal)).rejects.toThrow(
+        'cancelled',
+      );
+      expect(generate).not.toHaveBeenCalled();
     });
   });
 

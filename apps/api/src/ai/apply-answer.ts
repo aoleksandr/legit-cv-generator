@@ -38,6 +38,7 @@ export async function applyAnswer(
     answer: string;
     targetRole: string;
   },
+  signal?: AbortSignal,
 ): Promise<ApplyAnswerResult> {
   const path = parseFieldPath(input.fieldPath);
   if (!path) throw new LlmError(`Unknown CV field "${input.fieldPath}".`, false);
@@ -75,15 +76,18 @@ export async function applyAnswer(
         ? 'educationEntry'
         : (path.section as SectionKind);
 
-  const value = await llm.applyAnswer({
-    kind,
-    current: current as never,
-    facts: promptFacts,
-    question: input.question,
-    answer: input.answer,
-    answerFactId: answerFact.id,
-    targetRole: input.targetRole,
-  });
+  const value = await llm.applyAnswer(
+    {
+      kind,
+      current: current as never,
+      facts: promptFacts,
+      question: input.question,
+      answer: input.answer,
+      answerFactId: answerFact.id,
+      targetRole: input.targetRole,
+    },
+    signal,
+  );
 
   // Rebuild only the targeted part, normalise it, and ground-check it in isolation.
   const draft = toDraft(input.content);

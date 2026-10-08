@@ -44,6 +44,8 @@ export function buildGenerationWorkflow(
   llm: CvLlm,
   onProgress: (step: ProgressStep) => Promise<void>,
   failure: { error?: unknown } = {},
+  /** Not workflow input: Mastra step input must be serialisable. */
+  signal?: AbortSignal,
 ) {
   // Mastra serialises step errors, losing the LlmError class (and its `retryable` flag),
   // so each step records the original error for runGeneration to rethrow.
@@ -64,7 +66,7 @@ export function buildGenerationWorkflow(
     outputSchema: ExtractedSchema,
     execute: guard(async ({ inputData }) => {
       await onProgress('extracting');
-      const extraction = await llm.extractFacts(inputData);
+      const extraction = await llm.extractFacts(inputData, signal);
       return { extraction, ...inputData };
     }),
   });
@@ -101,7 +103,7 @@ export function buildGenerationWorkflow(
     outputSchema: DraftedSchema,
     execute: guard(async ({ inputData }) => {
       await onProgress('writing');
-      const draft = await llm.composeCv({ facts: inputData.facts, targetRole: inputData.targetRole });
+      const draft = await llm.composeCv({ facts: inputData.facts, targetRole: inputData.targetRole }, signal);
       return { ...inputData, draft };
     }),
   });
@@ -140,9 +142,10 @@ export async function runGeneration(
   llm: CvLlm,
   input: { sourceText: string; targetRole: string },
   onProgress: (step: ProgressStep) => Promise<void> = async () => {},
+  signal?: AbortSignal,
 ): Promise<GenerationResult> {
   const failure: { error?: unknown } = {};
-  const workflow = buildGenerationWorkflow(llm, onProgress, failure);
+  const workflow = buildGenerationWorkflow(llm, onProgress, failure, signal);
   const run = await workflow.createRun();
   const result = await run.start({ inputData: input });
   if (result.status === 'success') return result.result as GenerationResult;

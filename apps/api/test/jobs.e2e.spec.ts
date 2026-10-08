@@ -1,6 +1,6 @@
 import type { CvDetail } from '@cv/shared';
 import { LlmError } from '../src/ai/cv-llm.js';
-import { QueueService } from '../src/queue/queue.service.js';
+import { JOB_EXPIRE_SECONDS, QueueService } from '../src/queue/queue.service.js';
 import { composition, resetFakeLlm } from '../src/testing/fixtures.js';
 import {
   createCv,
@@ -116,12 +116,100 @@ describe('background jobs (e2e)', () => {
       expect(await jobsFor(ctx.prisma, cv.id)).toHaveLength(1);
     });
 
+    it('applies queue options to queues that already exist', async () => {
+      // As if the queue had been created by an older build with a shorter expiry.
+      await ctx.prisma.$executeRaw`UPDATE pgboss.queue SET expire_seconds = 60, retry_limit = 0`;
+
+      const rebooted = await createTestApp();
+      await rebooted.app.close();
+
+      const queues = await ctx.prisma.$queryRaw<{ name: string; expire_seconds: number; retry_limit: number }[]>`
+        SELECT name, expire_seconds, retry_limit FROM pgboss.queue WHERE name IN ('generate-cv', 'apply-answer') ORDER BY name`;
+      expect(queues).toEqual([
+        { name: 'apply-answer', expire_seconds: JOB_EXPIRE_SECONDS, retry_limit: 2 },
+        { name: 'generate-cv', expire_seconds: JOB_EXPIRE_SECONDS, retry_limit: 2 },
+      ]);
+    });
+
     it('is a no-op for a job whose CV is already ready or deleted', async () => {
       const cv = await createReadyCv(ctx, user);
       ctx.llm.extractFacts.mockClear();
       await runGenerateJob(ctx, cv.id);
       await runGenerateJob(ctx, '00000000-0000-4000-8000-000000000000');
       expect(ctx.llm.extractFacts).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('expired attempts (job.signal aborted)', () => {
+    /** The model call during which pg-boss gives up on the attempt. */
+    const expireDuring = (ac: AbortController, outcome: 'throws' | 'finishes') => async () => {
+      ac.abort(new Error('handler execution exceeded 900s'));
+      if (outcome === 'throws') throw new LlmError('The AI request was cancelled.', true);
+      return composition();
+    };
+
+    it('passes the signal to every model call', async () => {
+      const cv = await createCv(user);
+      const ac = new AbortController();
+      await runGenerateJob(ctx, cv.id, { retryCount: 0, retryLimit: 2, signal: ac.signal });
+      expect(ctx.llm.extractFacts.mock.calls[0][1]).toBe(ac.signal);
+      expect(ctx.llm.composeCv.mock.calls[0][1]).toBe(ac.signal);
+    });
+
+    it('writes nothing when a retry will take over', async () => {
+      const cv = await createCv(user);
+      const ac = new AbortController();
+      ctx.llm.composeCv.mockImplementation(expireDuring(ac, 'throws'));
+
+      // Resolves rather than rethrowing: pg-boss has already settled this attempt.
+      await runGenerateJob(ctx, cv.id, { retryCount: 0, retryLimit: 2, signal: ac.signal });
+
+      expect(await getCv(cv.id)).toMatchObject({ status: 'processing', error: null });
+    });
+
+    it('does not save a result that arrives after the attempt was aborted', async () => {
+      const cv = await createCv(user);
+      const ac = new AbortController();
+      ctx.llm.composeCv.mockImplementation(expireDuring(ac, 'finishes'));
+
+      await runGenerateJob(ctx, cv.id, { retryCount: 0, retryLimit: 2, signal: ac.signal });
+
+      expect(await getCv(cv.id)).toMatchObject({ status: 'processing', content: null, version: 0 });
+    });
+
+    it('marks the CV failed when the last attempt expires', async () => {
+      const cv = await createCv(user);
+      const ac = new AbortController();
+      ctx.llm.composeCv.mockImplementation(expireDuring(ac, 'throws'));
+
+      await runGenerateJob(ctx, cv.id, { retryCount: 2, retryLimit: 2, signal: ac.signal });
+
+      expect(await getCv(cv.id)).toMatchObject({ status: 'failed', error: 'This took too long. Please try again.' });
+    });
+
+    it('still saves a last attempt that finished just after expiring', async () => {
+      const cv = await createCv(user);
+      const ac = new AbortController();
+      ctx.llm.composeCv.mockImplementation(expireDuring(ac, 'finishes'));
+
+      await runGenerateJob(ctx, cv.id, { retryCount: 2, retryLimit: 2, signal: ac.signal });
+
+      expect((await getCv(cv.id)).status).toBe('ready');
+    });
+
+    it('leaves an aborted answer for its retry', async () => {
+      const cv = await createReadyCv(ctx, user);
+      const ac = new AbortController();
+      ctx.llm.applyAnswer.mockImplementation(async (_input, signal) => {
+        expect(signal).toBe(ac.signal);
+        ac.abort();
+        throw new LlmError('The AI request was cancelled.', true);
+      });
+
+      await user.post(`/api/cvs/${cv.id}/questions/${cv.questions[0].id}/answer`).send({ answer: 'x' }).expect(200);
+      await runAnswerJob(ctx, cv.questions[0].id, { retryCount: 0, retryLimit: 2, signal: ac.signal });
+
+      expect((await getCv(cv.id)).questions[0]).toMatchObject({ applying: true, error: null });
     });
   });
 

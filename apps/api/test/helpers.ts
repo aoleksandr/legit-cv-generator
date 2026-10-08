@@ -60,12 +60,23 @@ export async function createCv(agent: Agent): Promise<CvDetail> {
   return res.body as CvDetail;
 }
 
+export interface Attempt {
+  retryCount: number;
+  retryLimit: number;
+  /** pg-boss aborts it when the job expires or the worker shuts down. */
+  signal?: AbortSignal;
+}
+
 /** What the pg-boss worker would do: run the generate job once. */
-export function runGenerateJob(ctx: TestContext, cvId: string, attempt = { retryCount: 0, retryLimit: 2 }) {
+export function runGenerateJob(ctx: TestContext, cvId: string, attempt: Attempt = { retryCount: 0, retryLimit: 2 }) {
   return ctx.generation.handleGenerate({ data: { cvId }, ...attempt });
 }
 
-export function runAnswerJob(ctx: TestContext, questionId: string, attempt = { retryCount: 0, retryLimit: 2 }) {
+export function runAnswerJob(
+  ctx: TestContext,
+  questionId: string,
+  attempt: Attempt = { retryCount: 0, retryLimit: 2 },
+) {
   return ctx.generation.handleApplyAnswer({ data: { questionId }, ...attempt });
 }
 

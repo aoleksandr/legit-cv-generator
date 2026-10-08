@@ -148,7 +148,7 @@ export function fakeLlm() {
     extractFacts: vi.fn<CvLlm['extractFacts']>(),
     composeCv: vi.fn<CvLlm['composeCv']>(),
     // Loosely typed so tests can return any section's value.
-    applyAnswer: vi.fn<(input: ApplyAnswerInput<SectionKind>) => Promise<any>>(),
+    applyAnswer: vi.fn<(input: ApplyAnswerInput<SectionKind>, signal?: AbortSignal) => Promise<any>>(),
   } satisfies CvLlm;
   return resetFakeLlm(llm);
 }
@@ -166,5 +166,5 @@ export function resetFakeLlm<T extends Pick<FakeLlmMocks, keyof FakeLlmMocks>>(l
 interface FakeLlmMocks {
   extractFacts: Mock<CvLlm['extractFacts']>;
   composeCv: Mock<CvLlm['composeCv']>;
-  applyAnswer: Mock<(input: ApplyAnswerInput<SectionKind>) => Promise<any>>;
+  applyAnswer: Mock<(input: ApplyAnswerInput<SectionKind>, signal?: AbortSignal) => Promise<any>>;
 }
