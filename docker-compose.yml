@@ -26,7 +26,6 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET:-local-docker-secret-change-me}
       AI_MODEL_MAIN: ${AI_MODEL_MAIN:-claude-sonnet-5}
-      AI_MODEL_FAST: ${AI_MODEL_FAST:-claude-haiku-4-5}
       PORT: 3000
     depends_on:
       postgres:

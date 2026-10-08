@@ -10,8 +10,8 @@ Evaluation priorities: the end-to-end flow works; the system design is sound; fa
 - **Backend:** NestJS (REST only), TypeScript.
 - **Database:** PostgreSQL via **Prisma** (schema and migrations in `apps/api/prisma`).
 - **AI:** **Mastra**, embedded as a library inside the Nest app, not run as a separate Mastra server. All LLM calls go to the Anthropic API (Claude). Model ids come from env:
-  - Sonnet for extraction and composition
-  - Haiku for the light critic and question passes
+  - Sonnet (`AI_MODEL_MAIN`) for extraction, composition and applying answers
+  - The planned Haiku critic/question pass was cut (see README); questions come from extraction gaps and the deterministic checks
 - **Background jobs:** **pg-boss**, running on the same Postgres. No Redis.
 - **PDF:** **@react-pdf/renderer**, server-side. A4 page size, embedded fonts, selectable text. No headless browser.
 - **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). The only secret is `ANTHROPIC_API_KEY`, read from `.env`.
@@ -84,7 +84,7 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
    - Receives **only the verified facts** and the target role, never the raw source.
    - Writes concise bullets and a role-targeted summary, and orders experience by relevance.
    - Every bullet references `factIds`.
-4. **Verify output (deterministic, plus an optional LLM critic):**
+4. **Verify output (deterministic; the optional LLM critic was cut, see README):**
    - Bullets must cite existing fact ids.
    - Numbers, dates, company names and emails must appear in the cited facts.
    - Unsupported content is removed and turned into a question.
@@ -124,7 +124,7 @@ The AI may rephrase and restructure but **must not invent facts**. The Mastra wo
 3. API e2e (Vitest + supertest against a test Postgres): auth, **ownership isolation**, the 409 version conflict, upload validation.
 4. Job failure and retry behaviour.
 
-Frontend tests are optional and low priority.
+Frontend tests follow the testing trophy: mostly integration tests that render the real app (`renderApp` in `apps/web/src/test/render.tsx`) against an in-memory MSW API (`server.ts`). Query by role and label, act with `user-event`, assert on what the user sees and what was sent. Don't mock hooks or components.
 
 ## Conventions
 
@@ -132,8 +132,8 @@ Frontend tests are optional and low priority.
 - Code is formatted with Prettier (`.prettierrc.json`). Run `pnpm format` before committing; `pnpm format:check` verifies.
 - Tests must never call the real Anthropic API. Mock it at the Mastra agent/model boundary.
 - Possible cuts if time runs short, in order:
-  1. the LLM critic pass (keep the deterministic checks)
+  1. the LLM critic pass (keep the deterministic checks) — **cut**
   2. bullet reordering in the editor
-  3. frontend tests
+  3. frontend tests (not cut: integration tests exist)
 
   Do not cut: auth scoping, the job durability guarantees (generation survives a reload, a server restart or a failure, as described under "Async generation"), or validation of LLM output.

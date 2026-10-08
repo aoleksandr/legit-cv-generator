@@ -10,7 +10,7 @@
     "db:down": "docker compose stop postgres",
     "dev": "pnpm --filter @cv/shared build && pnpm --parallel --filter @cv/api --filter @cv/web dev",
     "build": "pnpm -r build",
-    "test": "pnpm --filter @cv/shared build && pnpm --filter @cv/api test",
+    "test": "pnpm --filter @cv/shared build && pnpm -r test",
     "typecheck": "pnpm --filter @cv/shared build && pnpm -r typecheck",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

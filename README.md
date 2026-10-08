@@ -9,7 +9,7 @@ cp .env.example .env            # put your ANTHROPIC_API_KEY in it
 docker compose up --build       # then open http://localhost:8080
 ```
 
-Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. The only secret is `ANTHROPIC_API_KEY`. Model ids default to `claude-sonnet-5` / `claude-haiku-4-5` and can be overridden with `AI_MODEL_MAIN` / `AI_MODEL_FAST`.
+Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. The only secret is `ANTHROPIC_API_KEY`. The model defaults to `claude-sonnet-5` and can be overridden with `AI_MODEL_MAIN`.
 
 **Local development** (Node 22+, pnpm 10):
 
@@ -25,8 +25,9 @@ pnpm dev                        # API on :3000, web on http://localhost:5173
 
 ```bash
 pnpm db:up                      # e2e tests need Postgres
-pnpm test                       # all API tests: unit + e2e
-pnpm --filter @cv/api test:unit # no database needed
+pnpm test                       # everything: API unit + e2e, then the web app
+pnpm --filter @cv/api test:unit # API unit tests, no database needed
+pnpm --filter @cv/web test      # web app tests, no database or API needed
 pnpm typecheck
 pnpm format:check               # Prettier (pnpm format to fix)
 ```
@@ -42,6 +43,18 @@ The e2e suite drops and recreates its own `cv_test` database (override with `TES
 | `test/auth.e2e.spec.ts`              | Signup and login, the httpOnly cookie, email case folding, rate limiting                                                                                                                                             |
 | `test/cvs.e2e.spec.ts`               | **Ownership isolation** (every route returns 404 for another user's CV), **409 on a stale version**, Zod validation of edits, PDF download (A4), upload validation (magic bytes, size, no text layer, corrupt files) |
 | `test/jobs.e2e.spec.ts`              | Job failure and retry: retryable vs final vs non-retryable errors, the user-facing messages, the Retry endpoint, no duplicate jobs, applying answers concurrently with manual edits                                  |
+
+**Frontend** (`apps/web/src/test`) follows the testing trophy: TypeScript is the static base, and nearly everything else is an integration test. There are no unit tests: the app's logic is in its hooks and flows, so testing through the UI loses nothing. There are no end-to-end browser tests yet (see "With more time").
+
+- **The real app.** Each test renders the whole app (real routes, auth guard, TanStack Query with the production config, toasts) in a memory router. Only the network is faked, with MSW: a small in-memory API (`server.ts`) handles sessions, versions and 409s, and records requests so tests can check payloads. Tests act like a user: they find elements by role and label and type with `user-event`.
+- **What's covered** (22 tests):
+  - sign-in, the redirect back to where you were going, an expired session, logout;
+  - creating a CV from text or PDF, form validation, the server being unreachable;
+  - generation progress picked up by polling, retry after a failure, a missing CV;
+  - debounced autosave carrying the version, the 409 revert with its explanation;
+  - optimistic rename with rollback, delete;
+  - answering, skipping, and a failed answer.
+- **They catch real breakage.** I broke seven behaviours one at a time (e.g. no polling, no 409 handling, no rollback), and each made a test fail. Writing the tests also found a bug: the "create from text" request sent an internal UI field (`source`) to the API.
 
 ### Eval against the real model
 
@@ -148,8 +161,10 @@ The design assumes the model will sometimes invent things. The guarantees come f
 
 Following "cut features, not reliability":
 
-- **The LLM critic pass was cut** (cut #1 in the plan). Only the deterministic checks run, so `AI_MODEL_FAST` is configured but currently unused.
-- **No frontend tests.** Testing effort went to grounding, the workflow, auth isolation and job failure handling.
+- **The LLM critic pass was cut** (cut #1 in the plan). The plan had a cheap Haiku pass after the deterministic checks, asking of each bullet and summary sentence: "is every claim supported by these facts?"
+  - The deterministic checks verify tokens (numbers, years, names, cited fact ids), not meaning. So "Maintained internal tools" can still become "Led development of the internal tooling platform", and the summary can pick up filler.
+  - The eval saw filler in 2 of 18 generations and no invented facts. Questions, also planned as a Haiku pass, come from the extractor's gaps and the deterministic checks instead.
+  - Everything runs on one model (`AI_MODEL_MAIN`).
 - **Only one prompt-injection defence:** delimiting plus deterministic verification. There is no separate classifier.
 - **Scanned PDFs are rejected** with a clear message rather than OCR'd. Text extraction loses layout (columns can interleave), which the extractor usually tolerates.
 - **One API process runs both HTTP and the worker.** That's fine here; in production they would be separate deployments of the same image (`WORKER_ENABLED=false` already exists for this).
@@ -163,7 +178,7 @@ Following "cut features, not reliability":
 - Grow the eval: more cases, several runs per case to measure variance, and an LLM-judged filler score instead of a word list.
 - Stream progress over SSE instead of polling, and show per-bullet "source" tooltips (the fact ids are already stored).
 - An eval set of real CVs, with known injected hallucinations, to measure how often the checks catch them.
-- Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add Playwright tests for the editor.
+- Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add a few Playwright end-to-end tests (the top of the trophy) against the real stack.
 
 ## How I used AI tools
 

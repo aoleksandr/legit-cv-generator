@@ -61,7 +61,10 @@ export function useCreateCv() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { source: 'pdf'; file: File; targetRole: string } | ({ source: 'text' } & CreateCvFromText)) =>
-      input.source === 'pdf' ? api.createFromPdf(input.file, input.targetRole) : api.createFromText(input),
+      input.source === 'pdf'
+        ? api.createFromPdf(input.file, input.targetRole)
+        : // Only the API's fields: `source` is the UI's discriminator, not part of the request.
+          api.createFromText({ targetRole: input.targetRole, text: input.text }),
     onSuccess: (cv) => {
       qc.setQueryData(keys.cv(cv.id), cv);
       void qc.invalidateQueries({ queryKey: keys.cvs });

@@ -18,7 +18,6 @@ export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
   models: {
     main: process.env.AI_MODEL_MAIN ?? 'claude-sonnet-5',
-    fast: process.env.AI_MODEL_FAST ?? 'claude-haiku-4-5',
   },
   /** Per LLM call. Generation of a long CV can legitimately take a while. */
   llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 180_000),
