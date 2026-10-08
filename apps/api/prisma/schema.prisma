@@ -1,0 +1,82 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  createdAt    DateTime @default(now()) @map("created_at")
+  cvs          Cv[]
+
+  @@map("users")
+}
+
+enum CvStatus {
+  queued
+  processing
+  ready
+  failed
+}
+
+enum SourceType {
+  pdf
+  text
+}
+
+model Cv {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @map("user_id") @db.Uuid
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  targetRole   String     @map("target_role")
+  sourceType   SourceType @map("source_type")
+  /// Extracted/pasted text the CV is generated from. The original PDF is not stored.
+  sourceText   String     @map("source_text")
+  /// CvDocument (validated by @cv/shared CvDocumentSchema). Null until generation succeeds.
+  content      Json?
+  /// Fact[] ledger: verified facts every generated statement must trace back to.
+  facts        Json       @default("[]")
+  status       CvStatus   @default(queued)
+  progressStep String?    @map("progress_step")
+  error        String?
+  /// Optimistic-locking counter, bumped on every content change.
+  version      Int        @default(0)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  questions    CvQuestion[]
+
+  @@index([userId, updatedAt])
+  @@map("cvs")
+}
+
+enum QuestionStatus {
+  open
+  answered
+  dismissed
+}
+
+model CvQuestion {
+  id        String         @id @default(uuid()) @db.Uuid
+  cvId      String         @map("cv_id") @db.Uuid
+  cv        Cv             @relation(fields: [cvId], references: [id], onDelete: Cascade)
+  /// Which part of the CV the answer updates, e.g. "experience[exp_1]" or "contact".
+  fieldPath String         @map("field_path")
+  question  String
+  answer    String?
+  status    QuestionStatus @default(open)
+  /// True while the AI is applying the answer.
+  applying  Boolean        @default(false)
+  error     String?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@index([cvId])
+  @@map("cv_questions")
+}
