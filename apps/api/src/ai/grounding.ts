@@ -99,16 +99,28 @@ class Corpus {
 
   /**
    * Every word of the value appears in the facts (allows reordering, not invention).
-   * A word of 4+ characters may also be the start of a fact word, so "Intern"
-   * matches "Internship" and "Engineer" matches "Engineering".
+   * A word of 4+ characters may also match the same word with a common ending, so
+   * "Intern" matches "Internship", "Engineer" "Engineering" and "Design" "Designer".
+   * Any other continuation is a different word: "Java" does not match "JavaScript".
    * With `within`, only those facts count (see forEntry).
    */
   hasWords(value: string, within?: Fact[]): boolean {
-    const text = within ? ` ${normalize(within.map((f) => `${f.text}\n${f.sourceQuote}`).join('\n'))} ` : this.text;
+    const text = within ? factText(within) : this.text;
     return normalize(value)
       .split(' ')
       .filter(Boolean)
-      .every((w) => text.includes(` ${w} `) || (w.length >= 4 && text.includes(` ${w}`)));
+      .every((w) => text.includes(` ${w} `) || (w.length >= 4 && new RegExp(` ${w}${WORD_ENDINGS} `, 'u').test(text)));
+  }
+
+  /**
+   * Name-like words in prose (employers, products, technologies) that the facts don't
+   * mention. Prose may be reworded freely, but "for Google" or "on Kubernetes" must come
+   * from somewhere. `extra` is additional trusted text, such as the target role.
+   */
+  unsupportedNames(prose: string, { within, extra = '' }: { within?: Fact[]; extra?: string } = {}): string[] {
+    const text = `${within ? factText(within) : this.text} ${normalize(extra)} `;
+    const known = (w: string) => text.includes(` ${normalize(w)} `);
+    return nameLikeWords(prose).filter((w) => !known(w) && !(/s$/.test(w) && w.length > 2 && known(w.slice(0, -1))));
   }
 
   hasDigits(value: string): boolean {
@@ -144,6 +156,40 @@ class Corpus {
   }
 }
 
+const factText = (facts: Fact[]) => ` ${normalize(facts.map((f) => `${f.text}\n${f.sourceQuote}`).join('\n'))} `;
+
+/** Endings that make a variant of the same word, not a different one ("Java" + "Script"). */
+const WORD_ENDINGS = '(?:s|es|er|ers|ing|ings|ed|ment|ments|ion|ions|ship|ships)';
+
+const MONTHS = new Set(
+  'january february march april may june july august september october november december jan feb mar apr jun jul aug sep sept oct nov dec'.split(
+    ' ',
+  ),
+);
+
+/**
+ * Words that look like names: capitalised mid-sentence ("at Acme", "on Kubernetes"),
+ * or with capitals inside ("TypeScript", "AWS", "iOS") anywhere. A capitalised word
+ * that starts a sentence is usually just the action verb ("Built"), so it doesn't count.
+ * Month names are left to the date checks.
+ */
+export function nameLikeWords(prose: string): string[] {
+  const out: string[] = [];
+  for (const sentence of prose.split(/(?<=[.!?;:])\s+/)) {
+    const words = sentence
+      .split(/[\s/–—-]+/)
+      .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').replace(/['’]s$/u, ''))
+      .filter(Boolean);
+    words.forEach((word, i) => {
+      if (word.length < 2 || !/\p{L}/u.test(word) || MONTHS.has(word.toLowerCase())) return;
+      const innerCapital = /\p{Lu}/u.test(word.slice(1));
+      const capitalisedMidSentence = i > 0 && /^\p{Lu}/u.test(word);
+      if (innerCapital || capitalisedMidSentence) out.push(word);
+    });
+  }
+  return out;
+}
+
 function belongsTo(fact: Fact, entryId: string): boolean {
   return fact.entry === null || fact.entry === entryId;
 }
@@ -155,7 +201,12 @@ export interface CvCheckResult {
   removed: string[];
 }
 
-export function verifyCv(input: CvDocument, facts: Fact[]): CvCheckResult {
+/** `targetRole` may be named in the summary ("… seeking Backend Engineer roles") without a fact. */
+export function verifyCv(
+  input: CvDocument,
+  facts: Fact[],
+  { targetRole = '' }: { targetRole?: string } = {},
+): CvCheckResult {
   const corpus = new Corpus(facts);
   const issues: Issue[] = [];
   const removed: string[] = [];
@@ -182,13 +233,16 @@ export function verifyCv(input: CvDocument, facts: Fact[]): CvCheckResult {
     issues.push({ fieldPath: 'contact', question: 'What is your full name as it should appear on the CV?' });
   }
 
-  // Summary: drop sentences that introduce numbers ("10+ years") not found in the facts.
+  // Summary: drop sentences that introduce numbers ("10+ years") or names ("former Google engineer")
+  // not found in the facts.
   if (cv.summary) {
     const sentences = cv.summary.match(/[^.!?]+[.!?]*/g) ?? [cv.summary];
     const kept = sentences.filter((s) => {
-      const bad = corpus.unsupportedNumbers(s);
-      if (bad.length) removed.push(`summary sentence (numbers ${bad.join(', ')}): ${s.trim()}`);
-      return bad.length === 0;
+      const numbers = corpus.unsupportedNumbers(s);
+      if (numbers.length) removed.push(`summary sentence (numbers ${numbers.join(', ')}): ${s.trim()}`);
+      const names = numbers.length ? [] : corpus.unsupportedNames(s, { extra: targetRole });
+      if (names.length) removed.push(`summary sentence (names ${names.join(', ')}): ${s.trim()}`);
+      return numbers.length === 0 && names.length === 0;
     });
     cv.summary = kept.join('').trim();
   }
@@ -235,6 +289,13 @@ function checkExperience(item: ExperienceItem, corpus: Corpus, issues: Issue[], 
       removed.push(`${path} bullet (numbers ${bad.join(', ')}): ${bullet.text}`);
       return false;
     }
+    // Names may come from any fact of this entry ("at Acme" when the cited fact is the achievement),
+    // never from another role.
+    const names = corpus.unsupportedNames(bullet.text, { within: own });
+    if (names.length) {
+      removed.push(`${path} bullet (names ${names.join(', ')}): ${bullet.text}`);
+      return false;
+    }
     bullet.factIds = cited.map((f) => f.id);
     return true;
   });
@@ -265,7 +326,11 @@ function checkEducation(item: EducationItem, corpus: Corpus, issues: Issue[], re
       item[key] = '';
     }
   }
-  if (item.details && corpus.unsupportedNumbers(item.details, own).length > 0) {
+  if (
+    item.details &&
+    (corpus.unsupportedNumbers(item.details, own).length > 0 ||
+      corpus.unsupportedNames(item.details, { within: own }).length > 0)
+  ) {
     removed.push(`${path}.details: ${item.details}`);
     item.details = '';
   }

@@ -141,11 +141,12 @@ The design assumes the model will sometimes invent things. The guarantees come f
 4. **Verify output (code)**, `verifyCv` in `grounding.ts`:
    - Bullets without valid fact ids are deleted.
    - Bullets with numbers not present in _their cited_ facts are deleted.
+   - Bullets that name something (a capitalised word mid-sentence, or one with capitals inside, such as `AWS` or `TypeScript`) that the entry's facts never mention are deleted. "Built the billing service for Google" goes unless Google is in that job's facts.
    - Names, emails, links and locations must appear in the facts; phone numbers are matched by digits.
-   - Titles, companies, institutions, degrees and skills must consist of words found in the facts.
+   - Titles, companies, institutions, degrees and skills must consist of words found in the facts. A common ending is allowed ("Engineer" for "Engineering", "Design" for "Designer"), but not a different word: "Java" does not pass on "JavaScript".
    - Dates may be reformatted, but their years must exist in the facts.
    - **Checks are scoped per entry.** Titles, companies, institutions, dates, education details and bullet citations are checked only against that job's or degree's facts (by the fact's `entry` key), plus facts not tied to any entry. A real employer, year, achievement or number can't migrate from one role to another.
-   - Summary sentences with unsupported numbers ("10+ years") are dropped.
+   - Summary sentences with unsupported numbers ("10+ years") or names ("former Google engineer") are dropped. The target role may be named.
    - Anything removed that matters (company, title, dates, name) becomes a question.
 5. **Answers:**
    - An answer is added to the fact ledger as a `user_answer` fact.
@@ -158,6 +159,7 @@ The design assumes the model will sometimes invent things. The guarantees come f
 **Known gaps in the checks** (deliberately simple; noted rather than hidden):
 
 - Word-level checks can't catch a recombination of real words that changes the meaning, or qualitative inflation such as "expert in". That's a deliberate trade-off (see "No LLM critic" below).
+- Names are recognised by capitalisation, so an invented name written in lowercase ("using kafka") or as the first word of a sentence isn't caught.
 
 ## What I simplified or cut
 

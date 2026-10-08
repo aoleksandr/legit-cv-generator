@@ -116,7 +116,7 @@ export function buildGenerationWorkflow(
     execute: guard(async ({ inputData }) => {
       await onProgress('checking');
       const document = toCvDocument(inputData.draft);
-      const { cv, issues, removed } = verifyCv(document, inputData.facts);
+      const { cv, issues, removed } = verifyCv(document, inputData.facts, { targetRole: inputData.targetRole });
       const gaps = inputData.gaps.flatMap((g) => normaliseIssue(g, cv));
       return {
         content: cv,

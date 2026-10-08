@@ -108,7 +108,7 @@ export async function applyAnswer(
   const updated = toCvDocument(draft);
 
   const isolated = isolate(updated, path.section, entryId);
-  const { cv: checked, removed } = verifyCv(isolated, promptFacts);
+  const { cv: checked, removed } = verifyCv(isolated, promptFacts, { targetRole: input.targetRole });
   const content = merge(checked, path.section, entryId, input.content);
 
   return { content, facts, removed };

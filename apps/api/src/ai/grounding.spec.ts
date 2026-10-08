@@ -1,7 +1,7 @@
 import type { Fact } from '@cv/shared';
 import { composition, FACTS, SOURCE_TEXT } from '../testing/fixtures.js';
 import { toCvDocument } from './generation.workflow.js';
-import { containsPhrase, extractNumbers, normalize, verifyCv, verifyFacts } from './grounding.js';
+import { containsPhrase, extractNumbers, nameLikeWords, normalize, verifyCv, verifyFacts } from './grounding.js';
 
 const sourceFact = (id: string, text: string, sourceQuote = text): Fact => ({
   id,
@@ -20,6 +20,22 @@ describe('text helpers', () => {
 
   it('extracts numbers with thousands separators collapsed', () => {
     expect(extractNumbers('1,200 rps, 99.9% uptime, 4 engineers')).toEqual(['1200', '99.9', '4']);
+  });
+
+  it('finds name-like words, skipping sentence-initial verbs and months', () => {
+    expect(nameLikeWords('Built the billing service on Kubernetes for Google. Shipped it in March.')).toEqual([
+      'Kubernetes',
+      'Google',
+    ]);
+    expect(nameLikeWords("AWS migration; moved CI/CD to GitHub Actions at Acme's request")).toEqual([
+      'AWS',
+      'CI',
+      'CD',
+      'GitHub',
+      'Actions',
+      'Acme',
+    ]);
+    expect(nameLikeWords('Improved iOS app start-up time')).toEqual(['iOS']);
   });
 
   it('matches phrases on word boundaries only', () => {
@@ -256,6 +272,71 @@ describe('verifyCv (output grounding)', () => {
       d.skills.push('Rust', 'Kubernetes operators');
     });
     expect(cv.skills).toEqual(['TypeScript', 'PostgreSQL', 'Kubernetes']);
+  });
+
+  it('accepts a word with a common ending, but not a different word that starts the same', () => {
+    const extra = (id: string, text: string): Fact => ({ ...FACTS[0], id, text, sourceQuote: text });
+    const facts = [...FACTS, extra('js', 'JavaScript'), extra('pd', 'Product Designer'), extra('in', 'International')];
+    const d = draft();
+    d.skills = ['JavaScript', 'Java', 'Type', 'Postgres', 'Product Design', 'Intern'];
+    expect(verifyCv(toCvDocument(d), facts).cv.skills).toEqual(['JavaScript', 'Product Design']);
+  });
+
+  describe('names in prose', () => {
+    it('removes bullets naming an employer or technology the facts never mention', () => {
+      const { cv, removed } = check((d) => {
+        d.experience[0].bullets[0].text = 'Built a payments API for Google and Stripe';
+        d.experience[0].bullets[1].text = 'Led a team of 4 engineers on AWS';
+      });
+      expect(cv.experience[0].bullets).toEqual([]);
+      expect(removed).toEqual([
+        'experience:exp_1 bullet (names Google, Stripe): Built a payments API for Google and Stripe',
+        'experience:exp_1 bullet (names AWS): Led a team of 4 engineers on AWS',
+      ]);
+    });
+
+    it('allows names from any fact of the same entry, or from facts with no entry', () => {
+      // The bullet cites only the achievement (f6); "Acme Corp" is in the entry's title fact,
+      // and "Kubernetes" in the entry-less skills fact.
+      const { removed } = check((d) => {
+        d.experience[0].bullets[0].text = "Built Acme Corp's Node.js payments API on Kubernetes";
+      });
+      expect(removed).toEqual([]);
+    });
+
+    it('does not let a name move from one role to another', () => {
+      const { cv } = check((d) => {
+        d.experience[1].bullets[0].text = 'Maintained internal tools for Acme Corp';
+      });
+      expect(cv.experience[1].bullets).toEqual([]);
+    });
+
+    it('ignores sentence-initial verbs, month names and plural acronyms', () => {
+      const { removed } = check((d) => {
+        d.experience[0].bullets[0].text = 'Shipped payments APIs in Node.js from January';
+      });
+      expect(removed).toEqual([]);
+    });
+
+    it('drops summary sentences with unsupported names, but allows the target role', () => {
+      const { cv, removed } = verifyCv(
+        toCvDocument({
+          ...draft(),
+          summary: 'Former Google engineer. Backend engineer seeking Senior Backend Engineer roles.',
+        }),
+        FACTS,
+        { targetRole: 'Senior Backend Engineer' },
+      );
+      expect(cv.summary).toBe('Backend engineer seeking Senior Backend Engineer roles.');
+      expect(removed).toEqual(['summary sentence (names Google): Former Google engineer.']);
+    });
+
+    it('clears education details that name something the facts do not', () => {
+      const { cv } = check((d) => {
+        d.education[0].details = 'Thesis supervised at Oxford';
+      });
+      expect(cv.education[0].details).toBe('');
+    });
   });
 
   it('does not mutate its input', () => {
