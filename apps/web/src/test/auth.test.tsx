@@ -1,5 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { cv, PASSWORD, USER } from './fixtures';
 import { renderApp } from './render';
 import { db, seedCv, sent, server } from './server';
@@ -99,5 +99,34 @@ describe('a signed-in session', () => {
     await router.navigate('/cvs/cv1');
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+  });
+
+  it('never shows the previous user’s data to the next person who signs in', async () => {
+    seedCv(cv());
+    const { user, router } = renderApp('/');
+    await screen.findByRole('link', { name: /Backend CV/ });
+
+    // Jane's session expires while the list is cached.
+    server.use(
+      http.get('/api/cvs', () => HttpResponse.json({ statusCode: 401, message: 'Session expired' }, { status: 401 }), {
+        once: true,
+      }),
+    );
+    await router.navigate('/cvs/new');
+    await screen.findByRole('heading', { name: 'New CV' });
+    await router.navigate('/');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
+
+    // Someone else signs up in the same tab; their (empty) list is slow to load.
+    db.cvs.clear();
+    server.use(http.get('/api/cvs', () => delay(200)));
+    await user.click(screen.getByRole('link', { name: 'Sign up' }));
+    await user.type(await screen.findByLabelText('Email'), 'bob@example.com');
+    await user.type(screen.getByLabelText('Password'), 'long enough password');
+    await user.click(screen.getByRole('button', { name: 'Sign up' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(screen.queryByText('Backend CV')).not.toBeInTheDocument();
+    expect(await screen.findByText("You don't have any CVs yet.")).toBeInTheDocument();
   });
 });

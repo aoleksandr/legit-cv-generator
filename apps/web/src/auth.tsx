@@ -21,10 +21,15 @@ export function useMe() {
   });
 }
 
+/**
+ * Signing in or out starts from an empty cache. Clearing only on logout isn't enough:
+ * after a session expires, the next person to sign in in that tab would briefly see
+ * the previous user's cached CVs.
+ */
 export function useSetUser() {
   const qc = useQueryClient();
   return (user: User | null) => {
-    if (!user) qc.clear();
+    qc.clear();
     qc.setQueryData(meKey, user);
   };
 }
