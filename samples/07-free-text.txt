@@ -1,0 +1,4 @@
+Hi, I'm Priya Sharma (priya.sharma@example.com). I've been a QA engineer at Fernway Health since 2019,
+where I set up the Cypress end-to-end tests for the patient portal and got our release checks down from two days
+to about four hours. Before that I spent two years doing manual testing at a small agency, I don't remember the
+exact dates. I studied biology at the University of Glasgow. I'd like to move into a Software Engineer in Test role.
