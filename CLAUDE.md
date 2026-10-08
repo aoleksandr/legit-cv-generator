@@ -13,7 +13,7 @@ Evaluation priorities: the end-to-end flow works; the system design is sound; fa
   - Sonnet (`AI_MODEL_MAIN`) for extraction, composition and applying answers
 - **Background jobs:** **pg-boss**, running on the same Postgres. No Redis.
 - **PDF:** **@react-pdf/renderer**, server-side. A4 page size, embedded fonts, selectable text. No headless browser.
-- **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). The only secret is `ANTHROPIC_API_KEY`, read from `.env`.
+- **Runtime:** `docker compose up` starts postgres, api (runs `prisma migrate deploy` on boot) and web (nginx serving the build and proxying `/api`). Secrets come from `.env`: `ANTHROPIC_API_KEY` and `JWT_SECRET`. In production (`NODE_ENV=production`) the API refuses to start without a real `JWT_SECRET`; dev and tests fall back to a built-in one.
 - **Package manager:** pnpm workspaces.
 
 ## Repo layout
@@ -30,7 +30,7 @@ The `CvDocument` Zod schema in `packages/shared` is the **single source of truth
 
 - `auth`:
   - Email and password signup/login, with passwords hashed by argon2.
-  - Sessions use a JWT in an **httpOnly cookie**.
+  - Sessions use a JWT in an **httpOnly cookie**. The JWT names a `sessions` row (`sid`); the guard checks the row exists and is unexpired, and logout deletes it.
   - A guard provides `userId`.
 - `cvs`:
   - CRUD. **Every query is scoped by `userId`.**
@@ -49,6 +49,7 @@ The `CvDocument` Zod schema in `packages/shared` is the **single source of truth
 ## Data model
 
 - `users`: id, email (unique, lowercased), password_hash, created_at
+- `sessions`: id, user_id (cascade delete), created_at, expires_at. One row per signed-in device.
 - `cvs`:
   - identity and input: id, user_id, title, target_role, source_type (`pdf` | `text`), source_text
   - results: content (jsonb `CvDocument`), facts (jsonb `Fact[]`, the verified fact ledger; kept out of `content` so manual edits can't touch it)

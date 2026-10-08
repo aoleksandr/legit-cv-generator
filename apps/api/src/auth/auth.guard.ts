@@ -1,15 +1,15 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
-import { AuthedRequest, AuthUser, IS_PUBLIC } from './auth.decorators.js';
+import { AuthedRequest, IS_PUBLIC } from './auth.decorators.js';
+import { AuthService } from './auth.service.js';
 
 export const SESSION_COOKIE = 'cv_session';
 
-/** Global guard: every route requires a valid session cookie unless marked @Public(). */
+/** Global guard: every route requires a live session unless marked @Public(). */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
-    private readonly jwt: JwtService,
+    private readonly auth: AuthService,
     private readonly reflector: Reflector,
   ) {}
 
@@ -21,12 +21,9 @@ export class AuthGuard implements CanActivate {
     const token: unknown = req.cookies?.[SESSION_COOKIE];
     if (typeof token !== 'string' || !token) throw new UnauthorizedException('Not signed in');
 
-    try {
-      const payload = await this.jwt.verifyAsync<{ sub: string; email: string }>(token);
-      req.user = { id: payload.sub, email: payload.email } satisfies AuthUser;
-      return true;
-    } catch {
-      throw new UnauthorizedException('Session expired, please sign in again');
-    }
+    const user = await this.auth.verifySession(token);
+    if (!user) throw new UnauthorizedException('Session expired, please sign in again');
+    req.user = user;
+    return true;
   }
 }

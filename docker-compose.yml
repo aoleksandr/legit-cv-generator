@@ -24,7 +24,8 @@ services:
     environment:
       DATABASE_URL: postgresql://cv:cv@postgres:5432/cv
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:-local-docker-secret-change-me}
+      # Required: the API refuses to start without a real secret (see .env.example).
+      JWT_SECRET: ${JWT_SECRET:-}
       AI_MODEL_MAIN: ${AI_MODEL_MAIN:-claude-sonnet-5}
       PORT: 3000
     depends_on:

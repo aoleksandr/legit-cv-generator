@@ -5,11 +5,11 @@ Sign in, paste your background or upload a PDF CV, name a target role, and get a
 ## Running it
 
 ```bash
-cp .env.example .env            # put your ANTHROPIC_API_KEY in it
+cp .env.example .env            # set ANTHROPIC_API_KEY, and JWT_SECRET=$(openssl rand -hex 32)
 docker compose up --build       # then open http://localhost:8080
 ```
 
-Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. The only secret is `ANTHROPIC_API_KEY`. The model defaults to `claude-sonnet-5` and can be overridden with `AI_MODEL_MAIN`.
+Compose starts Postgres, the API (it applies migrations on boot) and nginx, which serves the web app and proxies `/api`. It needs two secrets from `.env`: `ANTHROPIC_API_KEY`, and `JWT_SECRET` (at least 32 characters). The API refuses to start without a real `JWT_SECRET`, because a known one lets anyone forge a session. Local `pnpm dev` falls back to a dev-only value. The model defaults to `claude-sonnet-5` and can be overridden with `AI_MODEL_MAIN`.
 
 **Local development** (Node 22+, pnpm 10):
 
@@ -117,6 +117,8 @@ The main decisions:
 - **Mastra runs embedded in Nest** as a library: agents plus a 4-step workflow. Mastra serialises errors thrown inside steps, which loses `LlmError` and its `retryable` flag, so each step records the original error and `runGeneration` rethrows it.
 - **Auth:**
   - argon2 password hashes; a JWT lives in an httpOnly, `SameSite=Lax` cookie.
+  - The JWT names a row in `sessions`, and the guard checks that row on every request. Logout deletes it, so a copied cookie stops working while other devices stay signed in. A token for a deleted user is a 401, not a 500.
+  - Production refuses to start without a real `JWT_SECRET` (missing, shorter than 32 characters, or a placeholder from this repo).
   - The app and API share one origin via nginx, so no CORS. SameSite blocks cross-site POSTs (CSRF).
   - A global guard protects every route that isn't marked `@Public()`.
   - Every CV query is scoped by `userId`, and another user's CV returns **404**, not 403.
@@ -166,7 +168,6 @@ Following "cut features, not reliability":
 - **Scanned PDFs are rejected** with a clear message rather than OCR'd. Text extraction loses layout (columns can interleave), which the extractor usually tolerates.
 - **One API process runs both HTTP and the worker.** That's fine here; in production they would be separate deployments of the same image (`WORKER_ENABLED=false` already exists for this).
 - **Rate limits are in memory, per process, and keyed by IP.**
-- **Logout only clears the cookie;** JWTs are not revocable before they expire (7 days).
 - Out of scope per the brief: templates, job-description tailoring, OAuth, password reset, email verification.
 
 ## With more time
@@ -174,7 +175,7 @@ Following "cut features, not reliability":
 - Grow the eval: more cases, several runs per case to measure variance, and an LLM-judged filler score instead of a word list.
 - Stream progress over SSE instead of polling, and show per-bullet "source" tooltips (the fact ids are already stored).
 - An eval set of real CVs, with known injected hallucinations, to measure how often the checks catch them.
-- Split worker and API, put rate limiting in Postgres, add server-side session revocation, and add a few Playwright end-to-end tests (the top of the trophy) against the real stack.
+- Split worker and API, put rate limiting in Postgres, and add a few Playwright end-to-end tests (the top of the trophy) against the real stack.
 - Add observability via LangFuse (decided not to because it adds secrets to the .env file and complicates the review). Opted for simple logging with pino instead
 
 ## How I used AI tools

@@ -1,14 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Res, UnauthorizedException } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UnauthorizedException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { CredentialsSchema, type Credentials, type User } from '@cv/shared';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { config } from '../config.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import { Public, UserId } from './auth.decorators.js';
 import { SESSION_COOKIE } from './auth.guard.js';
-import { AuthService } from './auth.service.js';
-
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+import { AuthService, SESSION_TTL_MS } from './auth.service.js';
 
 @Controller('auth')
 export class AuthController {
@@ -42,7 +40,10 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(204)
-  logout(@Res({ passthrough: true }) res: Response): void {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response): Promise<void> {
+    // Public, so an already-expired session can still sign out cleanly.
+    const token: unknown = req.cookies?.[SESSION_COOKIE];
+    if (typeof token === 'string' && token) await this.auth.endSession(token);
     res.clearCookie(SESSION_COOKIE, { path: '/' });
   }
 
@@ -54,7 +55,7 @@ export class AuthController {
   }
 
   private async setSession(res: Response, user: User) {
-    res.cookie(SESSION_COOKIE, await this.auth.issueToken(user), {
+    res.cookie(SESSION_COOKIE, await this.auth.createSession(user), {
       httpOnly: true,
       // Lax blocks the cookie on cross-site POSTs, which is our CSRF protection
       // (the API only accepts JSON / multipart from our own origin).

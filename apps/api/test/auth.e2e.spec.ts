@@ -1,7 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { DEV_TEST_USER } from '@cv/shared';
+import { JwtService } from '@nestjs/jwt';
 import request from 'supertest';
+import { SESSION_COOKIE } from '../src/auth/auth.guard.js';
 import { createTestApp, signUp, type TestContext } from './helpers.js';
 
 describe('auth (e2e)', () => {
@@ -65,6 +67,52 @@ describe('auth (e2e)', () => {
 
     await agent.post('/api/auth/logout').expect(204);
     await agent.get('/api/auth/me').expect(401);
+  });
+
+  describe('sessions', () => {
+    const sessionCookie = (res: { headers: Record<string, unknown> }) =>
+      ((res.headers['set-cookie'] as string[] | undefined)?.[0] ?? '').split(';')[0];
+
+    const login = async (email: string) =>
+      sessionCookie(
+        await http().post('/api/auth/login').send({ email, password: 'correct horse battery' }).expect(200),
+      );
+
+    it('revokes the session on logout, so a copied cookie stops working', async () => {
+      await signUp(ctx.app, 'carol@example.com');
+      const cookie = await login('carol@example.com');
+      await http().get('/api/auth/me').set('Cookie', cookie).expect(200);
+
+      await http().post('/api/auth/logout').set('Cookie', cookie).expect(204);
+      await http().get('/api/auth/me').set('Cookie', cookie).expect(401);
+    });
+
+    it('keeps other devices signed in when one logs out', async () => {
+      await signUp(ctx.app, 'dave@example.com');
+      const laptop = await login('dave@example.com');
+      const phone = await login('dave@example.com');
+
+      await http().post('/api/auth/logout').set('Cookie', phone).expect(204);
+      await http().get('/api/auth/me').set('Cookie', laptop).expect(200);
+    });
+
+    it('rejects a validly signed token whose user no longer exists (401, not a 500)', async () => {
+      await signUp(ctx.app, 'erin@example.com');
+      const cookie = await login('erin@example.com');
+      await ctx.prisma.user.delete({ where: { email: 'erin@example.com' } });
+
+      await http()
+        .post('/api/cvs')
+        .set('Cookie', cookie)
+        .send({ targetRole: 'Backend Engineer', text: 'x'.repeat(100) })
+        .expect(401);
+    });
+
+    it('rejects a correctly signed token that names no session', async () => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { email: 'alice@example.com' } });
+      const token = await ctx.app.get(JwtService).signAsync({ sub: user.id, email: user.email });
+      await http().get('/api/cvs').set('Cookie', `${SESSION_COOKIE}=${token}`).expect(401);
+    });
   });
 
   it('rate-limits login attempts', async () => {
